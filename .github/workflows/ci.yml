@@ -133,3 +133,37 @@ jobs:
         run: |
           BODY=$(printf '### CI failure — Rust core (Windows)\n\n```\n%s\n```\n' "$(grep -E "^(error|src\\\\|src/)" ci.log | head -n 120)")
           gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$BODY" > /dev/null
+
+  windows-bundle:
+    name: Windows installer (NSIS hooks)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: windows-bundle
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # Proves the installer still compiles with the firewall hooks in
+      # installer-hooks.nsh — a broken macro only shows up at bundle time.
+      - name: Build the NSIS installer
+        shell: bash
+        run: npx tauri build --bundles nsis 2>&1 | tee -a ci.log
+
+      - name: Report failure
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY=$(printf '### CI failure — Windows installer\n\n```\n%s\n```\n' "$(tail -n 80 ci.log)")
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$BODY" > /dev/null

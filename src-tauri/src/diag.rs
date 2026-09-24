@@ -147,3 +147,143 @@ pub fn fatal(title: &str, body: &str) {
 pub fn webview_available() -> Result<String, String> {
     tauri::webview_version().map_err(|err| err.to_string())
 }
+
+/// Environment report for `MorseCode.exe --doctor`.
+///
+/// Answers the questions a remote debugging session would otherwise need a
+/// dozen round trips for: is there a webview, is the config writable, are the
+/// LAN ports free, which interfaces exist, what did the last launch do.
+pub fn doctor_report() -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+
+    let _ = writeln!(out, "MorseCode {} — diagnostics", env!("CARGO_PKG_VERSION"));
+    let _ = writeln!(
+        out,
+        "platform   {} {}",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    );
+    let _ = writeln!(
+        out,
+        "executable {}",
+        std::env::current_exe().unwrap_or_default().display()
+    );
+
+    match webview_available() {
+        Ok(version) => {
+            let _ = writeln!(out, "webview    OK (runtime {version})");
+        }
+        Err(err) => {
+            let _ = writeln!(out, "webview    MISSING — {err}");
+            let _ = writeln!(
+                out,
+                "           install the Microsoft Edge WebView2 runtime, or use the"
+            );
+            let _ = writeln!(out, "           offline-webview2 installer from the release page");
+        }
+    }
+
+    let config_dir = dirs::config_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("com.morsecode.app");
+    let writable = std::fs::create_dir_all(&config_dir)
+        .and_then(|_| std::fs::write(config_dir.join(".probe"), b"ok"))
+        .is_ok();
+    std::fs::remove_file(config_dir.join(".probe")).ok();
+    let _ = writeln!(
+        out,
+        "config     {} ({})",
+        config_dir.display(),
+        if writable { "writable" } else { "NOT WRITABLE" }
+    );
+    let _ = writeln!(
+        out,
+        "downloads  {}",
+        dirs::download_dir().unwrap_or_default().display()
+    );
+
+    let tcp = std::net::TcpListener::bind(("0.0.0.0", crate::model::DEFAULT_TRANSFER_PORT));
+    let _ = writeln!(
+        out,
+        "tcp {}   {}",
+        crate::model::DEFAULT_TRANSFER_PORT,
+        match tcp {
+            Ok(_) => "free".to_string(),
+            Err(err) => format!("IN USE / BLOCKED — {err}"),
+        }
+    );
+    let udp = std::net::UdpSocket::bind(("0.0.0.0", crate::model::DISCOVERY_PORT));
+    let _ = writeln!(
+        out,
+        "udp {}   {}",
+        crate::model::DISCOVERY_PORT,
+        match udp {
+            Ok(_) => "free".to_string(),
+            Err(err) => format!("IN USE / BLOCKED — {err}"),
+        }
+    );
+
+    match local_ip_address::list_afinet_netifas() {
+        Ok(list) => {
+            for (name, ip) in list.iter().filter(|(_, ip)| ip.is_ipv4() && !ip.is_loopback()) {
+                let _ = writeln!(out, "interface  {name} {ip}");
+            }
+        }
+        Err(err) => {
+            let _ = writeln!(out, "interface  enumeration failed: {err}");
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        let rule = std::process::Command::new("netsh")
+            .args(["advfirewall", "firewall", "show", "rule", "name=MorseCode"])
+            .output();
+        let state = match rule {
+            Ok(output) if output.status.success() => "present",
+            Ok(_) => "NOT FOUND — allow MorseCode on the Private profile",
+            Err(_) => "could not query netsh",
+        };
+        let _ = writeln!(out, "firewall   rule \"MorseCode\" {state}");
+    }
+
+    let _ = writeln!(out, "log        {}", log_path().display());
+    if let Ok(contents) = std::fs::read_to_string(log_path()) {
+        let tail: Vec<&str> = contents.lines().rev().take(20).collect();
+        let _ = writeln!(out, "\nlast log lines:");
+        for line in tail.into_iter().rev() {
+            let _ = writeln!(out, "  {line}");
+        }
+    }
+
+    out
+}
+
+/// `--doctor`: write the report to the log, show it, and exit.
+pub fn run_doctor() {
+    let report = doctor_report();
+    for line in report.lines() {
+        log("doctor", line);
+    }
+    println!("{report}");
+
+    #[cfg(windows)]
+    {
+        use std::iter::once;
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
+
+        let wide = |s: &str| -> Vec<u16> {
+            std::ffi::OsStr::new(s).encode_wide().chain(once(0)).collect()
+        };
+        unsafe {
+            MessageBoxW(
+                std::ptr::null_mut(),
+                wide(&report).as_ptr(),
+                wide("MorseCode diagnostics").as_ptr(),
+                MB_OK | MB_ICONINFORMATION,
+            );
+        }
+    }
+}

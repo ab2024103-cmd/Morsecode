@@ -31,6 +31,14 @@ use crate::state::AppState;
 pub fn run() {
     diag::init();
 
+    // `MorseCode --doctor` prints an environment report (webview, ports,
+    // interfaces, firewall, log tail) and exits — one file to send when
+    // something is wrong on a machine I cannot reach.
+    if std::env::args().any(|arg| arg == "--doctor") {
+        diag::run_doctor();
+        return;
+    }
+
     // The single most common silent-launch-failure on Windows: no Edge
     // WebView2 runtime, so the webview cannot be created and the process dies
     // before drawing anything. Check first and say so out loud.
