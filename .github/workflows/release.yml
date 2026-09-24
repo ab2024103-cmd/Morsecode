@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag to publish (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS (Apple silicon)
+            runner: macos-latest
+            target: aarch64-apple-darwin
+            args: '--target aarch64-apple-darwin'
+          - label: macOS (Intel)
+            runner: macos-latest
+            target: x86_64-apple-darwin
+            args: '--target x86_64-apple-darwin'
+          - label: Linux (AppImage + deb)
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            args: ''
+          - label: Windows (msi + nsis)
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: ''
+
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux WebKit/GTK dependencies
+        if: matrix.runner == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev \
+            file \
+            desktop-file-utils
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.target }}
+
+      - run: npm ci
+
+      - name: Build installers and publish the release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.event.inputs.version || github.ref_name }}
+          releaseName: 'MorseCode ${{ github.event.inputs.version || github.ref_name }}'
+          releaseBody: |
+            **MorseCode — Local. Fast. No internet required.**
+
+            Peer-to-peer file transfer between PCs on the same LAN. No cloud, no accounts, no internet.
+
+            | Platform | Download |
+            |---|---|
+            | Windows | `.msi` (WiX) or `.exe` (NSIS) |
+            | macOS | `.dmg` (Apple silicon and Intel builds) |
+            | Linux | `.AppImage` or `.deb` |
+
+            The binaries are unsigned: Windows SmartScreen and macOS Gatekeeper will warn on first launch
+            (on macOS use right-click → Open, or `xattr -dr com.apple.quarantine /Applications/MorseCode.app`).
+
+            See the README for the protocol and security model.
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: false
+          args: ${{ matrix.args }}
