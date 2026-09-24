@@ -218,11 +218,11 @@
 [data-theme='hud'] .tray-pop::before {
   content: '';
   position: absolute;
-  left: 5px;
+  right: 5px;
   top: 5px;
   width: 15px;
   height: 15px;
-  border-left: 1px solid var(--bracket);
+  border-right: 1px solid var(--bracket);
   border-top: 1px solid var(--bracket);
   pointer-events: none;
   z-index: 4;
@@ -236,14 +236,23 @@
 [data-theme='hud'] .tray-pop::after {
   content: '';
   position: absolute;
-  right: 5px;
+  left: 5px;
   bottom: 5px;
   width: 15px;
   height: 15px;
-  border-right: 1px solid var(--bracket);
+  border-left: 1px solid var(--bracket);
   border-bottom: 1px solid var(--bracket);
   pointer-events: none;
   z-index: 4;
+}
+
+[data-theme='hud'] .radar {
+  border-radius: 0;
+  clip-path: var(--panel-clip);
+}
+
+[data-theme='hud'] .radar-sweep {
+  border-radius: 0;
 }
 
 [data-theme='hud'] .radar::before,
@@ -257,14 +266,14 @@
   z-index: 4;
 }
 [data-theme='hud'] .radar::before {
-  left: 8px;
+  right: 8px;
   top: 8px;
-  border-width: 1px 0 0 1px;
+  border-width: 1px 1px 0 0;
 }
 [data-theme='hud'] .radar::after {
-  right: 8px;
+  left: 8px;
   bottom: 8px;
-  border-width: 0 1px 1px 0;
+  border-width: 0 0 1px 1px;
 }
 
 /* ── typography & chrome ─────────────────────────────────────────────────── */
