@@ -12,6 +12,19 @@ Tauri v2 · Rust · React 18 + TypeScript · Zustand · AES-256-GCM
 
 </div>
 
+### Download
+
+**[Latest release — v1.0.0](https://github.com/ab2024103-cmd/Morsecode/releases/tag/v1.0.0)**
+
+| Platform | File | Size |
+|---|---|---|
+| Windows 10/11 | `MorseCode_1.0.0_x64_en-US.msi` · `MorseCode_1.0.0_x64-setup.exe` | 3.2 MiB · 2.5 MiB |
+| macOS (Apple silicon) | `MorseCode_1.0.0_aarch64.dmg` | 3.0 MiB |
+| macOS (Intel) | `MorseCode_1.0.0_x64.dmg` | 3.1 MiB |
+| Linux | `MorseCode_1.0.0_amd64.deb` · `MorseCode_1.0.0_amd64.AppImage` | 3.5 MiB · 78.3 MiB |
+
+The binaries are **unsigned** — Windows SmartScreen and macOS Gatekeeper warn on first launch (macOS: right-click → Open, or `xattr -dr com.apple.quarantine /Applications/MorseCode.app`). The AppImage is large because it carries its own GTK/WebKit runtime; the `.deb` uses the system one.
+
 ---
 
 ## What this is
@@ -194,7 +207,18 @@ Full details in [`docs/PROTOCOL.md`](docs/PROTOCOL.md). In short:
 | Accept/Reject blocks untrusted devices | ✅ `transfer.rs::request_consent` + `ConsentModal` |
 | Trusted devices skip the modal | ✅ fingerprint-pinned, large-transfer override |
 | Clipboard + system log in both themes | ✅ |
-| Under 15 MB installed | ◻︎ expected, not measured here — needs a real `tauri build` |
-| Installers build on all three OSes | ◻︎ configured, not executed here |
+| Under 15 MB installed | ✅ 2.5–3.5 MiB installers on Windows/macOS/Linux (`.deb` 3.5 MiB; the AppImage is 78 MiB only because it vendors GTK/WebKit) |
+| Installers build on all three OSes | ✅ v1.0.0 published `.msi`, `.exe`, two `.dmg`, `.deb`, `.AppImage` |
 
-**Build environment note:** this workspace has no Rust toolchain and no network access to `crates.io`, so `src-tauri/` could not be compiled or bundled here. The TypeScript side is fully type-checked, built and smoke-tested; the Rust side is complete, self-consistent source that expects a first `cargo`/`tauri build` on a machine with the toolchain (run `npm run tauri build` and address any crate-version drift in `Cargo.toml` if it appears).
+**Build environment note:** this workspace has no Rust toolchain and no network access to `crates.io`, so `src-tauri/` is never compiled locally. Compilation and packaging happen in GitHub Actions instead:
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `.github/workflows/ci.yml` | every push / PR | `tsc --noEmit`, `vite build`, `npm run smoke`, then `cargo check --all-targets` + `clippy` on Ubuntu 22.04 |
+| `.github/workflows/release.yml` | `v*` tag or manual dispatch | `tauri-action` on macOS (arm64 + x86_64), Ubuntu 22.04 and Windows; publishes the installers to a GitHub Release |
+
+Cut a new release with:
+
+```bash
+git tag -a v1.0.1 -m "MorseCode v1.0.1" && git push origin v1.0.1
+```
