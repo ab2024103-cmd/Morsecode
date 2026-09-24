@@ -197,7 +197,7 @@ export async function hostInfo(): Promise<HostInfo> {
       hostname: mockBackend.getSettings().deviceName,
       ip: '192.168.1.17',
       platform: navigator.platform || 'browser',
-      version: '1.0.2',
+      version: '1.0.3',
       runtime: 'browser',
     };
   }

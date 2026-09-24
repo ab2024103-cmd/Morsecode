@@ -14,15 +14,15 @@ Tauri v2 · Rust · React 18 + TypeScript · Zustand · AES-256-GCM
 
 ### Download
 
-**[Latest release — v1.0.2](https://github.com/ab2024103-cmd/Morsecode/releases/tag/v1.0.2)**
+**[Latest release — v1.0.3](https://github.com/ab2024103-cmd/Morsecode/releases/tag/v1.0.3)**
 
 | Platform | File | Size |
 |---|---|---|
-| Windows 10/11 | `MorseCode_1.0.2_x64-setup.exe` · `MorseCode_1.0.2_x64_en-US.msi` | 3.0 MiB · 4.0 MiB |
-| Windows, **offline PC** | `MorseCode_1.0.2_x64-setup-offline-webview2.exe` (bundles the WebView2 runtime) | 208.9 MiB |
-| macOS (Apple silicon) | `MorseCode_1.0.2_aarch64.dmg` | 3.5 MiB |
-| macOS (Intel) | `MorseCode_1.0.2_x64.dmg` | 3.6 MiB |
-| Linux | `MorseCode_1.0.2_amd64.deb` · `MorseCode_1.0.2_amd64.AppImage` | 4.1 MiB · 78.8 MiB |
+| Windows 10/11 | `MorseCode_1.0.3_x64-setup.exe` · `MorseCode_1.0.3_x64_en-US.msi` | 3.0 MiB · 4.0 MiB |
+| Windows, **offline PC** | `MorseCode_1.0.3_x64-setup-offline-webview2.exe` (bundles the WebView2 runtime) | 208.9 MiB |
+| macOS (Apple silicon) | `MorseCode_1.0.3_aarch64.dmg` | 3.5 MiB |
+| macOS (Intel) | `MorseCode_1.0.3_x64.dmg` | 3.6 MiB |
+| Linux | `MorseCode_1.0.3_amd64.deb` · `MorseCode_1.0.3_amd64.AppImage` | 4.1 MiB · 78.8 MiB |
 
 The binaries are **unsigned** — Windows SmartScreen and macOS Gatekeeper warn on first launch (macOS: right-click → Open, or `xattr -dr com.apple.quarantine /Applications/MorseCode.app`). The AppImage is large because it carries its own GTK/WebKit runtime; the `.deb` uses the system one.
 
@@ -198,7 +198,7 @@ Full details in [`docs/PROTOCOL.md`](docs/PROTOCOL.md). In short:
 
 ### The app doesn't open — the tray icon appears for a moment and disappears (Windows)
 
-That is a startup failure in a GUI-subsystem binary, which by design has no console to print to. Since **v1.0.2** MorseCode writes every startup stage to a log and shows a native error dialog instead of vanishing:
+That is a startup failure in a GUI-subsystem binary, which by design has no console to print to. Since **v1.0.3** MorseCode writes every startup stage to a log and shows a native error dialog instead of vanishing:
 
 ```
 %LOCALAPPDATA%\com.morsecode.app\startup.log
@@ -207,7 +207,7 @@ That is a startup failure in a GUI-subsystem binary, which by design has no cons
 Settings → System → **Diagnostics log** shows the same path with an *Open* button. Open it with Notepad (paste the path into the Explorer address bar). A healthy launch reads:
 
 ```
-boot     MorseCode 1.0.2 · windows x86_64 · exe "C:\Program Files\MorseCode\MorseCode.exe"
+boot     MorseCode 1.0.3 · windows x86_64 · exe "C:\Program Files\MorseCode\MorseCode.exe"
 webview  runtime 120.0.2210.91
 setup    begin
 state    config dir C:\Users\<you>\AppData\Roaming\com.morsecode.app
@@ -222,16 +222,33 @@ webview  Finished http://tauri.localhost/ (main)
 
 The last line before it stops tells you what failed.
 
+Or run the built-in report — it answers every question in one shot:
+
+```bat
+"C:\Program Files\MorseCode\MorseCode.exe" --doctor
+```
+
+```
+MorseCode 1.0.3 — diagnostics
+platform   windows x86_64
+webview    OK (runtime 120.0.2210.91)
+config     C:\Users\<you>\AppData\Roaming\com.morsecode.app (writable)
+tcp 33456  free
+udp 33457  free
+interface  Wi-Fi 192.168.1.24
+firewall   rule "MorseCode" present
+```
+
 **Most likely cause: the Microsoft Edge WebView2 runtime is missing.** Tauri apps render their UI with it, and the standard installer only *downloads* it — which fails on a PC with no internet. Two fixes:
 
 - install **Microsoft Edge WebView2 Runtime** (Evergreen Standalone Installer) from Microsoft, or
-- use **`MorseCode_1.0.2_x64-setup-offline-webview2.exe`** from the release — it carries the runtime inside the installer, so it works on a machine that has never been online.
+- use **`MorseCode_1.0.3_x64-setup-offline-webview2.exe`** from the release — it carries the runtime inside the installer, so it works on a machine that has never been online.
 
-Other causes the v1.0.2 build now survives rather than dying on: an unwritable config directory, a corrupt `history.sqlite` (falls back to an in-memory database), a tray icon that the shell refuses, and any panic in a background task (`panic = "unwind"`, so a failed discovery or transfer can no longer abort the process).
+Other causes the v1.0.3 build now survives rather than dying on: an unwritable config directory, a corrupt `history.sqlite` (falls back to an in-memory database), a tray icon that the shell refuses, and any panic in a background task (`panic = "unwind"`, so a failed discovery or transfer can no longer abort the process).
 
 ### Nothing appears on the radar
 
-Both PCs must be on the same subnet, and Windows Firewall must allow MorseCode on the **Private** network profile (TCP 33456 and UDP 33457). Guest/"client isolation" Wi-Fi blocks peer-to-peer traffic entirely — use Settings → *Connect manually* with the other machine's `IP:33456` to confirm, or a wired/hotspot network.
+Both PCs must be on the same subnet. The NSIS installer adds the Windows Firewall rules itself (inbound + outbound, private and domain profiles, removed on uninstall); `--doctor` prints whether the rule is present, and whether TCP 33456 / UDP 33457 are free. Guest/"client isolation" Wi-Fi blocks peer-to-peer traffic entirely — use Settings → *Connect manually* with the other machine's `IP:33456` to confirm, or a wired/hotspot network.
 
 ---
 
@@ -262,5 +279,5 @@ Both PCs must be on the same subnet, and Windows Firewall must allow MorseCode o
 Cut a new release with:
 
 ```bash
-git tag -a v1.0.2 -m "MorseCode v1.0.2" && git push origin v1.0.2
+git tag -a v1.0.3 -m "MorseCode v1.0.3" && git push origin v1.0.3
 ```
