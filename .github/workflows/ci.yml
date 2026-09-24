@@ -98,3 +98,38 @@ jobs:
           BODY=$(printf '### CI failure — Rust core\n\n```\n%s\n```\n' "$(grep -E "^(error|warning: unused|src/)" ci.log | head -n 120)")
           gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
             -f body="$BODY" > /dev/null
+
+  core-windows:
+    name: Rust core (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: windows-check
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci && npm run build
+
+      # The Windows-only startup paths (WebView2 pre-flight, MessageBoxW
+      # failure dialog) are cfg'd out on Linux, so they need their own check.
+      - name: cargo check
+        shell: bash
+        run: cargo check --all-targets --message-format short 2>&1 | tee -a ../ci.log
+        working-directory: src-tauri
+
+      - name: Report failure
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY=$(printf '### CI failure — Rust core (Windows)\n\n```\n%s\n```\n' "$(grep -E "^(error|src\\\\|src/)" ci.log | head -n 120)")
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$BODY" > /dev/null
