@@ -56,22 +56,32 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(app: AppHandle) -> anyhow::Result<Arc<Self>> {
+    /// Infallible on purpose: a missing config directory, an unwritable
+    /// history file or a corrupt settings file must degrade, never prevent the
+    /// app from opening its window.
+    pub fn new(app: AppHandle) -> Arc<Self> {
         let config_dir = app
             .path()
             .app_config_dir()
-            .unwrap_or_else(|_| PathBuf::from("."));
-        std::fs::create_dir_all(&config_dir).ok();
+            .unwrap_or_else(|_| dirs::config_dir().unwrap_or_else(std::env::temp_dir))
+            .to_path_buf();
+        if let Err(err) = std::fs::create_dir_all(&config_dir) {
+            crate::diag::log(
+                "state",
+                format!("config dir {} not writable: {err}", config_dir.display()),
+            );
+        }
+        crate::diag::log("state", format!("config dir {}", config_dir.display()));
 
         let identity = load_identity(&config_dir);
         let settings = load_settings(&config_dir);
         let minimize_to_tray = settings.minimize_to_tray;
         let trusted = TrustedStore::load(config_dir.join("trusted.json"));
-        let history = HistoryStore::open(config_dir.join("history.sqlite"))?;
+        let history = HistoryStore::open_or_memory(config_dir.join("history.sqlite"));
 
         std::fs::create_dir_all(&settings.download_dir).ok();
 
-        Ok(Arc::new(Self {
+        Arc::new(Self {
             app,
             identity,
             settings: RwLock::new(settings),
@@ -86,7 +96,7 @@ impl AppState {
             config_dir,
             discovery_running: AtomicBool::new(false),
             minimize_to_tray: AtomicBool::new(minimize_to_tray),
-        }))
+        })
     }
 
     // ── event helpers ────────────────────────────────────────────────────────

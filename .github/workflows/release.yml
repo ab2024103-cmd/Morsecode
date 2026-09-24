@@ -98,3 +98,40 @@ jobs:
           prerelease: false
           includeUpdaterJson: false
           args: ${{ matrix.args }}
+
+  windows-offline:
+    name: Windows (offline WebView2 setup)
+    needs: bundle
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: x86_64-pc-windows-msvc
+
+      - run: npm ci
+
+      # Same app, but the installer carries the full Edge WebView2 runtime so
+      # it can be installed on a PC that has never been online.
+      - name: Build NSIS installer with the bundled WebView2 runtime
+        run: npx tauri build --bundles nsis --config src-tauri/tauri.webview-offline.conf.json
+
+      - name: Upload to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.inputs.version || github.ref_name }}"
+          SRC=$(ls src-tauri/target/release/bundle/nsis/*-setup.exe | head -1)
+          DEST="MorseCode_${TAG#v}_x64-setup-offline-webview2.exe"
+          cp "$SRC" "$DEST"
+          gh release upload "$TAG" "$DEST" --clobber

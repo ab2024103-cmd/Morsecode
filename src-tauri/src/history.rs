@@ -14,10 +14,40 @@ pub struct HistoryStore {
 }
 
 impl HistoryStore {
+    /// Opens the on-disk history, falling back to an in-memory database when
+    /// the file cannot be created or is corrupt. History is a convenience, not
+    /// a reason to refuse to launch.
+    pub fn open_or_memory(path: PathBuf) -> Self {
+        match Self::open(path.clone()) {
+            Ok(store) => store,
+            Err(err) => {
+                crate::diag::log(
+                    "history",
+                    format!("{} unusable ({err}) — falling back to memory", path.display()),
+                );
+                Self::in_memory()
+            }
+        }
+    }
+
+    fn in_memory() -> Self {
+        let conn = Connection::open_in_memory().expect("in-memory SQLite is always available");
+        let _ = conn.execute_batch(SCHEMA);
+        Self {
+            conn: Mutex::new(conn),
+        }
+    }
+
     pub fn open(path: PathBuf) -> Result<Self> {
         let conn = Connection::open(path)?;
-        conn.execute_batch(
-            "PRAGMA journal_mode=WAL;
+        conn.execute_batch(SCHEMA)?;
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
+    }
+}
+
+const SCHEMA: &str = "PRAGMA journal_mode=WAL;
              CREATE TABLE IF NOT EXISTS transfers (
                 id           TEXT PRIMARY KEY,
                 ts           INTEGER NOT NULL,
@@ -28,15 +58,11 @@ impl HistoryStore {
                 duration_ms  INTEGER NOT NULL,
                 status       TEXT NOT NULL
              );
-             CREATE INDEX IF NOT EXISTS idx_transfers_ts ON transfers(ts DESC);",
-        )?;
-        Ok(Self {
-            conn: Mutex::new(conn),
-        })
-    }
+             CREATE INDEX IF NOT EXISTS idx_transfers_ts ON transfers(ts DESC);";
 
+impl HistoryStore {
     pub fn insert(&self, entry: &HistoryEntry) -> Result<()> {
-        let conn = self.conn.lock().expect("history mutex poisoned");
+        let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         conn.execute(
             "INSERT OR REPLACE INTO transfers
                 (id, ts, device_id, device_name, file_name, size, duration_ms, status)
@@ -56,7 +82,7 @@ impl HistoryStore {
     }
 
     pub fn list(&self, limit: usize) -> Result<Vec<HistoryEntry>> {
-        let conn = self.conn.lock().expect("history mutex poisoned");
+        let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let mut stmt = conn.prepare(
             "SELECT id, ts, device_id, device_name, file_name, size, duration_ms, status
              FROM transfers ORDER BY ts DESC LIMIT ?1",
@@ -77,7 +103,7 @@ impl HistoryStore {
     }
 
     pub fn clear(&self) -> Result<()> {
-        let conn = self.conn.lock().expect("history mutex poisoned");
+        let conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         conn.execute("DELETE FROM transfers", [])?;
         Ok(())
     }

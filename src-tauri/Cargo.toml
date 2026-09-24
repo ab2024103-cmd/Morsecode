@@ -1,6 +1,6 @@
 [package]
 name = "morsecode"
-version = "1.0.0"
+version = "1.0.1"
 description = "Peer-to-peer LAN file transfer. Local. Fast. No internet required."
 authors = ["MorseCode"]
 edition = "2021"
@@ -49,6 +49,14 @@ dirs = "5"
 
 anyhow = "1"
 
+[target.'cfg(windows)'.dependencies]
+# Native message box for launch failures — a GUI-subsystem binary has no
+# console, so without this a startup error is completely invisible.
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
 [features]
 # Ship the smallest possible binary by default.
 default = []
@@ -57,6 +65,8 @@ default = []
 opt-level = "z"     # optimise for size — target is < 15 MB installed
 lto = true
 codegen-units = 1
-panic = "abort"
+# NOT "abort": a panic in a background task (discovery, a transfer) must not
+# take the whole application down without a trace.
+panic = "unwind"
 strip = true
 incremental = false

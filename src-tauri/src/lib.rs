@@ -7,6 +7,7 @@
 
 pub mod clipboard;
 pub mod commands;
+pub mod diag;
 pub mod crypto;
 pub mod discovery;
 pub mod history;
@@ -21,23 +22,82 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tauri::{Manager, WindowEvent};
+use tauri::{Manager, RunEvent, WindowEvent, WebviewUrl, WebviewWindowBuilder};
 
 use crate::model::LogLevel;
 use crate::state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    diag::init();
+
+    // The single most common silent-launch-failure on Windows: no Edge
+    // WebView2 runtime, so the webview cannot be created and the process dies
+    // before drawing anything. Check first and say so out loud.
+    match diag::webview_available() {
+        Ok(version) => diag::log("webview", format!("runtime {version}")),
+        Err(err) => {
+            diag::log("webview", format!("unavailable: {err}"));
+            #[cfg(windows)]
+            {
+                diag::fatal(
+                    "MorseCode needs the Microsoft Edge WebView2 runtime",
+                    "MorseCode draws its interface with the Microsoft Edge WebView2 runtime, \
+                     which is missing on this PC.\n\n\
+                     Install \"Microsoft Edge WebView2 Runtime\" (Evergreen Standalone Installer) \
+                     and start MorseCode again. On a machine with no internet access, download it \
+                     on another PC and copy the installer across, or use the \
+                     MorseCode setup build that bundles the runtime offline.",
+                );
+                return;
+            }
+        }
+    }
+
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            diag::log("setup", "begin");
             let handle = app.handle().clone();
-            let state = AppState::new(handle.clone())?;
+            let state = AppState::new(handle.clone());
             app.manage(state.clone());
+            diag::log("setup", "state ready");
 
-            tray::setup(&handle)?;
+            // The window must appear even if a background subsystem is broken,
+            // so nothing below this point is allowed to abort startup.
+            match app.get_webview_window("main") {
+                Some(window) => {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    diag::log("setup", "main window shown");
+                }
+                None => {
+                    diag::log("setup", "main window missing — creating it");
+                    match WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                        .title("MorseCode")
+                        .inner_size(1400.0, 900.0)
+                        .min_inner_size(1100.0, 700.0)
+                        .decorations(false)
+                        .center()
+                        .build()
+                    {
+                        Ok(_) => diag::log("setup", "fallback window created"),
+                        Err(err) => diag::fatal(
+                            "MorseCode could not open its window",
+                            &format!("The application window failed to start: {err}"),
+                        ),
+                    }
+                }
+            }
+
+            if let Err(err) = tray::setup(&handle) {
+                // A missing tray is survivable; dying at launch is not.
+                diag::log("tray", format!("tray unavailable: {err}"));
+            } else {
+                diag::log("setup", "tray ready");
+            }
 
             state.log(LogLevel::Info, "CORE", "MorseCode core starting");
             state.log(
@@ -73,6 +133,7 @@ pub fn run() {
                 }
             });
 
+            diag::log("setup", "done");
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -120,6 +181,20 @@ pub fn run() {
             commands::simulate_incoming,
             commands::reveal_downloads,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running MorseCode");
+        .build(tauri::generate_context!());
+
+    match app {
+        Ok(app) => {
+            diag::log("run", "event loop starting");
+            app.run(|_handle, event| match event {
+                RunEvent::ExitRequested { .. } => diag::log("run", "exit requested"),
+                RunEvent::Exit => diag::log("run", "exit"),
+                _ => {}
+            });
+        }
+        Err(err) => diag::fatal(
+            "MorseCode failed to start",
+            &format!("The application could not be initialised: {err}"),
+        ),
+    }
 }
