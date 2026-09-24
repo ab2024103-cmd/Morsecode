@@ -204,7 +204,7 @@ That is a startup failure in a GUI-subsystem binary, which by design has no cons
 %LOCALAPPDATA%\com.morsecode.app\startup.log
 ```
 
-Open it with Notepad (paste the path into the Explorer address bar). A healthy launch reads:
+Settings → System → **Diagnostics log** shows the same path with an *Open* button. Open it with Notepad (paste the path into the Explorer address bar). A healthy launch reads:
 
 ```
 boot     MorseCode 1.0.2 · windows x86_64 · exe "C:\Program Files\MorseCode\MorseCode.exe"
@@ -216,6 +216,8 @@ setup    main window shown
 setup    tray ready
 setup    done
 run      event loop starting
+webview  Started http://tauri.localhost/ (main)
+webview  Finished http://tauri.localhost/ (main)
 ```
 
 The last line before it stops tells you what failed.
