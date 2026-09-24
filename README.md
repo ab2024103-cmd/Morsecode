@@ -14,14 +14,15 @@ Tauri v2 · Rust · React 18 + TypeScript · Zustand · AES-256-GCM
 
 ### Download
 
-**[Latest release — v1.0.0](https://github.com/ab2024103-cmd/Morsecode/releases/tag/v1.0.0)**
+**[Latest release — v1.0.1](https://github.com/ab2024103-cmd/Morsecode/releases/tag/v1.0.1)**
 
 | Platform | File | Size |
 |---|---|---|
-| Windows 10/11 | `MorseCode_1.0.0_x64_en-US.msi` · `MorseCode_1.0.0_x64-setup.exe` | 3.2 MiB · 2.5 MiB |
-| macOS (Apple silicon) | `MorseCode_1.0.0_aarch64.dmg` | 3.0 MiB |
-| macOS (Intel) | `MorseCode_1.0.0_x64.dmg` | 3.1 MiB |
-| Linux | `MorseCode_1.0.0_amd64.deb` · `MorseCode_1.0.0_amd64.AppImage` | 3.5 MiB · 78.3 MiB |
+| Windows 10/11 | `MorseCode_1.0.1_x64-setup.exe` · `MorseCode_1.0.1_x64_en-US.msi` | 3.0 MiB · 4.0 MiB |
+| Windows, **offline PC** | `MorseCode_1.0.1_x64-setup-offline-webview2.exe` (bundles the WebView2 runtime) | 208.9 MiB |
+| macOS (Apple silicon) | `MorseCode_1.0.1_aarch64.dmg` | 3.5 MiB |
+| macOS (Intel) | `MorseCode_1.0.1_x64.dmg` | 3.6 MiB |
+| Linux | `MorseCode_1.0.1_amd64.deb` · `MorseCode_1.0.1_amd64.AppImage` | 4.1 MiB · 78.8 MiB |
 
 The binaries are **unsigned** — Windows SmartScreen and macOS Gatekeeper warn on first launch (macOS: right-click → Open, or `xattr -dr com.apple.quarantine /Applications/MorseCode.app`). The AppImage is large because it carries its own GTK/WebKit runtime; the `.deb` uses the system one.
 
@@ -246,7 +247,7 @@ Both PCs must be on the same subnet, and Windows Firewall must allow MorseCode o
 | Accept/Reject blocks untrusted devices | ✅ `transfer.rs::request_consent` + `ConsentModal` |
 | Trusted devices skip the modal | ✅ fingerprint-pinned, large-transfer override |
 | Clipboard + system log in both themes | ✅ |
-| Under 15 MB installed | ✅ 2.5–3.5 MiB installers on Windows/macOS/Linux (`.deb` 3.5 MiB; the AppImage is 78 MiB only because it vendors GTK/WebKit) |
+| Under 15 MB installed | ✅ 3.0–4.1 MiB installers on Windows/macOS/Linux (`.deb` 3.5 MiB; the AppImage is 78 MiB only because it vendors GTK/WebKit) |
 | Installers build on all three OSes | ✅ v1.0.0 published `.msi`, `.exe`, two `.dmg`, `.deb`, `.AppImage` |
 
 **Build environment note:** this workspace has no Rust toolchain and no network access to `crates.io`, so `src-tauri/` is never compiled locally. Compilation and packaging happen in GitHub Actions instead:
