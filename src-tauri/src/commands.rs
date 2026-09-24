@@ -301,6 +301,21 @@ pub async fn simulate_incoming(state: Shared<'_>) -> Result<(), String> {
         .map_err(err)
 }
 
+/// Absolute path of the startup/diagnostics log, shown in Settings.
+#[tauri::command]
+pub async fn diagnostics_log_path() -> Result<String, String> {
+    Ok(crate::diag::log_path().to_string_lossy().to_string())
+}
+
+/// Opens the diagnostics log in the OS file manager / default text editor.
+#[tauri::command]
+pub async fn open_diagnostics_log(app: AppHandle) -> Result<(), String> {
+    let path = crate::diag::log_path();
+    app.opener()
+        .reveal_item_in_dir(&path)
+        .map_err(|err| format!("could not open {}: {err}", path.display()))
+}
+
 /// Reveals the download folder in the OS file manager.
 #[tauri::command]
 pub async fn reveal_downloads(app: AppHandle, state: Shared<'_>) -> Result<(), String> {

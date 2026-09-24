@@ -71,7 +71,13 @@ pub fn run() {
                 Some(window) => {
                     let _ = window.show();
                     let _ = window.set_focus();
-                    diag::log("setup", "main window shown");
+                    diag::log(
+                        "setup",
+                        format!(
+                            "main window shown (visible={:?})",
+                            window.is_visible().unwrap_or(false)
+                        ),
+                    );
                 }
                 None => {
                     diag::log("setup", "main window missing — creating it");
@@ -136,6 +142,15 @@ pub fn run() {
             diag::log("setup", "done");
             Ok(())
         })
+        // If the UI bundle fails to load the window is blank rather than
+        // absent — that looks identical to a crash from the outside, so record
+        // it too.
+        .on_page_load(|window, payload| {
+            diag::log(
+                "webview",
+                format!("{:?} {} ({})", payload.event(), payload.url(), window.label()),
+            );
+        })
         .on_window_event(|window, event| {
             // Closing the window keeps the core alive in the tray (when the
             // user has that enabled) so transfers continue in the background.
@@ -180,6 +195,8 @@ pub fn run() {
             commands::quit_app,
             commands::simulate_incoming,
             commands::reveal_downloads,
+            commands::diagnostics_log_path,
+            commands::open_diagnostics_log,
         ])
         .build(tauri::generate_context!());
 

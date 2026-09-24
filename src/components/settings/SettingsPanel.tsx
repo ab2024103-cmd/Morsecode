@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 import { Panel } from '../shared/Panel';
 import { Toggle } from '../shared/Toggle';
 import { Slider } from '../shared/Slider';
@@ -7,7 +9,12 @@ import { useSettingsStore } from '../../store/useSettingsStore';
 import { useThemeStore } from '../../store/useThemeStore';
 import { useDeviceStore, useDeviceList } from '../../store/useDeviceStore';
 import { useToastStore } from '../../store/useToastStore';
-import { startDiscovery, stopDiscovery } from '../../ipc/commands';
+import {
+  diagnosticsLogPath,
+  openDiagnosticsLog,
+  startDiscovery,
+  stopDiscovery,
+} from '../../ipc/commands';
 import { useHostInfo } from '../../hooks/useHostInfo';
 
 export function SettingsPanel({ onManageTrusted }: { onManageTrusted: () => void }) {
@@ -18,6 +25,17 @@ export function SettingsPanel({ onManageTrusted }: { onManageTrusted: () => void
   const toast = useToastStore((s) => s.push);
   const host = useHostInfo();
   const trusted = devices.filter((d) => d.trusted);
+  const [logPath, setLogPath] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    void diagnosticsLogPath().then((path) => {
+      if (alive) setLogPath(path);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
     <div className="grid-2">
@@ -250,6 +268,22 @@ export function SettingsPanel({ onManageTrusted }: { onManageTrusted: () => void
             title="Native OS notifications"
             description="Mirror in-app toasts to the desktop notification centre."
           />
+          <div className="toggle">
+            <div className="toggle-copy">
+              <strong>Diagnostics log</strong>
+              <span>
+                Every startup stage is written here — the first place to look if the app ever fails
+                to open.
+              </span>
+              <span className="mono" style={{ fontSize: 10, opacity: 0.72, wordBreak: 'break-all' }}>
+                {logPath}
+              </span>
+            </div>
+            <Button size="sm" icon="folder" onClick={() => void openDiagnosticsLog()}>
+              Open
+            </Button>
+          </div>
+
           <div className="row" style={{ marginTop: 14 }}>
             <Button
               variant="danger"

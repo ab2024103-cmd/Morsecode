@@ -197,11 +197,23 @@ export async function hostInfo(): Promise<HostInfo> {
       hostname: mockBackend.getSettings().deviceName,
       ip: '192.168.1.17',
       platform: navigator.platform || 'browser',
-      version: '1.0.0',
+      version: '1.0.1',
       runtime: 'browser',
     };
   }
   return invoke<HostInfo>('host_info');
+}
+
+/** Absolute path of the startup/diagnostics log written by the Rust core. */
+export async function diagnosticsLogPath(): Promise<string> {
+  if (!isTauri) return 'Diagnostics log is only written by the desktop build.';
+  return invoke<string>('diagnostics_log_path');
+}
+
+/** Opens the folder containing the diagnostics log. */
+export async function openDiagnosticsLog(): Promise<void> {
+  if (!isTauri) return;
+  await invoke('open_diagnostics_log');
 }
 
 export async function nativeNotify(title: string, body: string): Promise<void> {
