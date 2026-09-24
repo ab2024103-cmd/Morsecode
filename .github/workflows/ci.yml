@@ -28,9 +28,11 @@ jobs:
       - run: npm ci
 
       - name: Typecheck + build
+        shell: bash  # -eo pipefail, so `| tee` cannot mask a failure
         run: npm run build 2>&1 | tee -a ci.log
 
       - name: Headless smoke test (all screens, 4 themes, consent flow)
+        shell: bash
         run: npm run smoke 2>&1 | tee -a ci.log
 
       # Log archives live on blob storage that is not always reachable, so
@@ -78,10 +80,12 @@ jobs:
       - run: npm ci && npm run build
 
       - name: cargo check
+        shell: bash
         run: cargo check --all-targets --message-format short 2>&1 | tee -a ../ci.log
         working-directory: src-tauri
 
       - name: cargo clippy
+        shell: bash
         run: cargo clippy --all-targets --message-format short 2>&1 | tee -a ../ci.log
         working-directory: src-tauri
         continue-on-error: true
