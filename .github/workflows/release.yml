@@ -32,10 +32,6 @@ jobs:
             runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             args: ''
-          - label: Windows (msi + nsis)
-            runner: windows-latest
-            target: x86_64-pc-windows-msvc
-            args: ''
 
     runs-on: ${{ matrix.runner }}
     steps:
@@ -99,6 +95,56 @@ jobs:
           includeUpdaterJson: false
           args: ${{ matrix.args }}
 
+  windows:
+    name: Windows (msi + nsis)
+    needs: bundle
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: x86_64-pc-windows-msvc
+
+      - run: npm ci
+
+      # Built by hand rather than through tauri-action so the output is teed to
+      # a file: Actions log archives are not always retrievable, and a silent
+      # Windows bundling failure is exactly what this project cannot afford.
+      - name: Build installers
+        shell: bash
+        run: npx tauri build --bundles msi,nsis 2>&1 | tee -a build.log
+
+      - name: Upload to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.inputs.version || github.ref_name }}"
+          for asset in src-tauri/target/release/bundle/msi/*.msi \
+                       src-tauri/target/release/bundle/nsis/*-setup.exe; do
+            [ -f "$asset" ] || continue
+            echo "uploading $asset"
+            gh release upload "$TAG" "$asset" --clobber
+          done
+
+      - name: Report failure
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY=$(printf '### Release failure — Windows installers\n\n```\n%s\n```\n' "$(tail -n 120 build.log)")
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$BODY" > /dev/null
+
   windows-offline:
     name: Windows (offline WebView2 setup)
     needs: bundle
@@ -123,7 +169,8 @@ jobs:
       # Same app, but the installer carries the full Edge WebView2 runtime so
       # it can be installed on a PC that has never been online.
       - name: Build NSIS installer with the bundled WebView2 runtime
-        run: npx tauri build --bundles nsis --config src-tauri/tauri.webview-offline.conf.json
+        shell: bash
+        run: npx tauri build --bundles nsis --config src-tauri/tauri.webview-offline.conf.json 2>&1 | tee -a build.log
 
       - name: Upload to the release
         shell: bash
@@ -135,3 +182,12 @@ jobs:
           DEST="MorseCode_${TAG#v}_x64-setup-offline-webview2.exe"
           cp "$SRC" "$DEST"
           gh release upload "$TAG" "$DEST" --clobber
+
+      - name: Report failure
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY=$(printf '### Release failure — Windows offline installer\n\n```\n%s\n```\n' "$(tail -n 120 build.log)")
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$BODY" > /dev/null
