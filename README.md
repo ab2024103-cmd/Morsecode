@@ -193,6 +193,45 @@ Full details in [`docs/PROTOCOL.md`](docs/PROTOCOL.md). In short:
 
 ---
 
+## Troubleshooting
+
+### The app doesn't open — the tray icon appears for a moment and disappears (Windows)
+
+That is a startup failure in a GUI-subsystem binary, which by design has no console to print to. Since **v1.0.1** MorseCode writes every startup stage to a log and shows a native error dialog instead of vanishing:
+
+```
+%LOCALAPPDATA%\com.morsecode.app\startup.log
+```
+
+Open it with Notepad (paste the path into the Explorer address bar). A healthy launch reads:
+
+```
+boot     MorseCode 1.0.1 · windows x86_64 · exe "C:\Program Files\MorseCode\MorseCode.exe"
+webview  runtime 120.0.2210.91
+setup    begin
+state    config dir C:\Users\<you>\AppData\Roaming\com.morsecode.app
+setup    state ready
+setup    main window shown
+setup    tray ready
+setup    done
+run      event loop starting
+```
+
+The last line before it stops tells you what failed.
+
+**Most likely cause: the Microsoft Edge WebView2 runtime is missing.** Tauri apps render their UI with it, and the standard installer only *downloads* it — which fails on a PC with no internet. Two fixes:
+
+- install **Microsoft Edge WebView2 Runtime** (Evergreen Standalone Installer) from Microsoft, or
+- use **`MorseCode_1.0.1_x64-setup-offline-webview2.exe`** from the release — it carries the runtime inside the installer, so it works on a machine that has never been online.
+
+Other causes the v1.0.1 build now survives rather than dying on: an unwritable config directory, a corrupt `history.sqlite` (falls back to an in-memory database), a tray icon that the shell refuses, and any panic in a background task (`panic = "unwind"`, so a failed discovery or transfer can no longer abort the process).
+
+### Nothing appears on the radar
+
+Both PCs must be on the same subnet, and Windows Firewall must allow MorseCode on the **Private** network profile (TCP 33456 and UDP 33457). Guest/"client isolation" Wi-Fi blocks peer-to-peer traffic entirely — use Settings → *Connect manually* with the other machine's `IP:33456` to confirm, or a wired/hotspot network.
+
+---
+
 ## Status against the acceptance criteria
 
 | Criterion | Status |
