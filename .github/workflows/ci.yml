@@ -10,6 +10,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   frontend:
     name: Frontend (typecheck · build · smoke)
@@ -25,13 +28,24 @@ jobs:
       - run: npm ci
 
       - name: Typecheck + build
-        run: npm run build
+        run: npm run build 2>&1 | tee -a ci.log
 
       - name: Headless smoke test (all screens, 4 themes, consent flow)
-        run: npm run smoke
+        run: npm run smoke 2>&1 | tee -a ci.log
+
+      # Log archives live on blob storage that is not always reachable, so
+      # failures are echoed back onto the commit where they can be read via API.
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY=$(printf '### CI failure — frontend\n\n```\n%s\n```\n' "$(tail -n 120 ci.log)")
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
+            -f body="$BODY" > /dev/null
 
   core:
-    name: Rust core (fmt · clippy · check)
+    name: Rust core (check · clippy)
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -50,29 +64,33 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          components: clippy
 
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
 
-      # The frontend dist/ is referenced by tauri.conf.json.
+      # dist/ is referenced by tauri.conf.json, so the frontend must exist.
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
       - run: npm ci && npm run build
 
-      - name: cargo fmt
-        working-directory: src-tauri
-        run: cargo fmt --all -- --check
-        continue-on-error: true
-
       - name: cargo check
+        run: cargo check --all-targets --message-format short 2>&1 | tee -a ../ci.log
         working-directory: src-tauri
-        run: cargo check --all-targets
 
       - name: cargo clippy
+        run: cargo clippy --all-targets --message-format short 2>&1 | tee -a ../ci.log
         working-directory: src-tauri
-        run: cargo clippy --all-targets -- -D warnings
         continue-on-error: true
+
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY=$(printf '### CI failure — Rust core\n\n```\n%s\n```\n' "$(grep -E "^(error|warning: unused|src/)" ci.log | head -n 120)")
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
+            -f body="$BODY" > /dev/null

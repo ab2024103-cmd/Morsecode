@@ -8,13 +8,24 @@
 use anyhow::{anyhow, Result};
 use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM, NONCE_LEN};
 use ring::agreement::{agree_ephemeral, EphemeralPrivateKey, PublicKey, UnparsedPublicKey, X25519};
-use ring::hkdf::{Salt, HKDF_SHA256};
+use ring::hkdf::{KeyType, Salt, HKDF_SHA256};
 use ring::rand::{SecureRandom, SystemRandom};
 use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 const HKDF_INFO: &[u8] = b"morsecode/v1/session";
 const HKDF_SALT: &[u8] = b"morsecode/v1/salt";
+const KEY_LEN: usize = 32; // AES-256
+
+/// Length marker for the HKDF expansion — avoids relying on ring's
+/// `KeyType for &'static aead::Algorithm` impl.
+struct Aes256KeyLen;
+
+impl KeyType for Aes256KeyLen {
+    fn len(&self) -> usize {
+        KEY_LEN
+    }
+}
 
 /// Which side of the connection we are — keeps the two nonce spaces disjoint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,9 +115,9 @@ impl Handshake {
             let salt = Salt::new(HKDF_SHA256, HKDF_SALT);
             let prk = salt.extract(shared);
             let okm = prk
-                .expand(&[HKDF_INFO], &AES_256_GCM)
-                .expect("HKDF expand for a fixed-length AEAD key cannot fail");
-            let mut out = [0u8; 32];
+                .expand(&[HKDF_INFO], Aes256KeyLen)
+                .expect("HKDF expand with a fixed 32-byte length cannot fail");
+            let mut out = [0u8; KEY_LEN];
             okm.fill(&mut out)
                 .expect("AES-256-GCM key length matches the OKM length");
             out

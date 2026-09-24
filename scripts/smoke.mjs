@@ -45,6 +45,17 @@ window.console = {
 };
 
 const tick = (ms = 260) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Polls until `predicate` is truthy — CI runners are much slower than a laptop. */
+async function waitFor(predicate, timeout = 12_000, step = 150) {
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    const value = predicate();
+    if (value) return value;
+    if (Date.now() > deadline) return null;
+    await tick(step);
+  }
+}
 const click = (el) => el && el.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 const byText = (selector, text) =>
   [...doc.querySelectorAll(selector)].find((node) => node.textContent.trim().toLowerCase().includes(text));
@@ -55,7 +66,9 @@ try {
   problems.push(`eval threw: ${error?.stack ?? error}`);
 }
 
-await tick(2400); // let discovery populate
+// Let discovery populate (poll rather than guess at a fixed delay).
+await waitFor(() => doc.querySelectorAll('.blip').length >= 3);
+await waitFor(() => doc.querySelectorAll('.log-line').length > 0);
 
 const checks = [];
 const check = (label, ok, detail = '') => {
@@ -75,8 +88,7 @@ check('8 nav entries', navItems.length === 8, `${navItems.length}`);
 for (const item of navItems) {
   const label = item.textContent.trim();
   click(item);
-  await tick(160);
-  const title = doc.querySelector('.screen-title')?.textContent?.trim();
+  const title = await waitFor(() => doc.querySelector('.screen-title')?.textContent?.trim());
   check(`screen "${label}"`, !!title, title);
 }
 
@@ -100,19 +112,17 @@ await tick(120);
 // ── send flow ───────────────────────────────────────────────────────────────
 click(navItems.find((n) => n.textContent.includes('Send')));
 await tick(200);
-const target = doc.querySelector('.bc-target');
+const target = await waitFor(() => doc.querySelector('.bc-target'));
 click(target);
-await tick(120);
-check('broadcast target selectable', target?.dataset.on === 'true');
+check('broadcast target selectable', !!(await waitFor(() => target?.dataset.on === 'true', 3000)));
 
 // ── consent modal ───────────────────────────────────────────────────────────
 click(navItems.find((n) => n.textContent.includes('Discover')));
 await tick(160);
 let modal = null;
-for (let attempt = 0; attempt < 4 && !modal; attempt += 1) {
+for (let attempt = 0; attempt < 6 && !modal; attempt += 1) {
   click(byText('.btn', 'simulate inbound'));
-  await tick(400);
-  modal = doc.querySelector('.modal-backdrop');
+  modal = await waitFor(() => doc.querySelector('.modal-backdrop'), 1500);
 }
 check('consent modal blocks untrusted device', !!modal);
 if (modal) {
@@ -120,15 +130,14 @@ if (modal) {
   await tick(80);
   check('trust checkbox toggles', doc.querySelector('.checkbox')?.dataset.checked === 'true');
   click(byText('.modal-foot .btn', 'accept'));
-  await tick(600);
+  await waitFor(() => !doc.querySelector('.modal-backdrop'));
   check('modal dismissed after accept', !doc.querySelector('.modal-backdrop'));
-  check('toast surfaced', doc.querySelectorAll('.toast').length > 0);
+  check('toast surfaced', !!(await waitFor(() => doc.querySelectorAll('.toast').length > 0)));
 }
 
 // ── tray menu ───────────────────────────────────────────────────────────────
 click(doc.querySelector('.win-btn'));
-await tick(120);
-check('tray menu opens', !!doc.querySelector('.tray-pop'));
+check('tray menu opens', !!(await waitFor(() => doc.querySelector('.tray-pop'), 3000)));
 click(byText('.tray-item', 'pause'));
 await tick(120);
 
@@ -142,14 +151,18 @@ if (textarea) {
   textarea.dispatchEvent(new window.Event('input', { bubbles: true }));
   await tick(120);
   click(byText('.btn.primary', 'send'));
-  await tick(300);
-  check('clipboard item recorded', doc.querySelectorAll('.clip-item').length > 0);
+  check(
+    'clipboard item recorded',
+    !!(await waitFor(() => doc.querySelectorAll('.clip-item').length > 0)),
+  );
 }
 
 // ── history ─────────────────────────────────────────────────────────────────
 click(navItems.find((n) => n.textContent.includes('History')));
-await tick(220);
-check('history rows', doc.querySelectorAll('table.data tbody tr').length > 0);
+check(
+  'history rows',
+  !!(await waitFor(() => doc.querySelectorAll('table.data tbody tr').length > 0)),
+);
 click(byText('.tab', 'failed'));
 await tick(140);
 check('history tab filters', !!doc.querySelector('table.data, .empty'));
