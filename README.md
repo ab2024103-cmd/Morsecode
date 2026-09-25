@@ -239,7 +239,9 @@ interface  Wi-Fi 192.168.1.24
 firewall   rule "MorseCode" present
 ```
 
-**Most likely cause: the Microsoft Edge WebView2 runtime is missing.** Tauri apps render their UI with it, and the standard installer only *downloads* it — which fails on a PC with no internet. Two fixes:
+**Known root cause, fixed in v1.0.5:** `tauri.conf.json` shipped `"plugins": { "dialog": {} }`, and that plugin takes no configuration, so initialisation failed and the process exited before drawing a window. `src-tauri/tests/startup.rs` builds the real app with the real config in CI now, so it cannot recur silently.
+
+**If the log says the webview is missing:** the Microsoft Edge WebView2 runtime is absent. Tauri apps render their UI with it, and the standard installer only *downloads* it — which fails on a PC with no internet. Two fixes:
 
 - install **Microsoft Edge WebView2 Runtime** (Evergreen Standalone Installer) from Microsoft, or
 - use **`MorseCode_1.0.5_x64-setup-offline-webview2.exe`** from the release — it carries the runtime inside the installer, so it works on a machine that has never been online.
