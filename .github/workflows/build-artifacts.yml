@@ -1,0 +1,52 @@
+name: Build artifacts
+
+# Builds the installers and uploads them as workflow artifacts — no tag, no
+# release. For trying out branch builds (e.g. discovery fixes) on real
+# machines before cutting a release.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['arena/**']
+
+concurrency:
+  group: artifacts-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows installers (msi + nsis)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Same cache key as the CI windows-bundle job so branch builds are warm.
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: windows-bundle
+
+      - run: npm ci
+
+      - name: Build installers
+        shell: bash
+        run: npx tauri build --bundles msi,nsis 2>&1 | tee -a build.log
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: MorseCode-windows-x64-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*-setup.exe
