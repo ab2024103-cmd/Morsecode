@@ -1,0 +1,16 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+.DS_Store
+.vscode/
+.idea/
+
+# Rust / Tauri build output
+src-tauri/target/
+src-tauri/gen/
+
+# Local runtime data (created by the app at runtime)
+*.sqlite
+*.sqlite-journal
+morsecode-history.db

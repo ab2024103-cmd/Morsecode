@@ -1,0 +1,193 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag to publish (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS (Apple silicon)
+            runner: macos-latest
+            target: aarch64-apple-darwin
+            args: '--target aarch64-apple-darwin'
+          - label: macOS (Intel)
+            runner: macos-latest
+            target: x86_64-apple-darwin
+            args: '--target x86_64-apple-darwin'
+          - label: Linux (AppImage + deb)
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            args: ''
+
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux WebKit/GTK dependencies
+        if: matrix.runner == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev \
+            file \
+            desktop-file-utils
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.target }}
+
+      - run: npm ci
+
+      - name: Build installers and publish the release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.event.inputs.version || github.ref_name }}
+          releaseName: 'MorseCode ${{ github.event.inputs.version || github.ref_name }}'
+          releaseBody: |
+            **MorseCode — Local. Fast. No internet required.**
+
+            Peer-to-peer file transfer between PCs on the same LAN. No cloud, no accounts, no internet.
+
+            | Platform | Download |
+            |---|---|
+            | Windows | `.msi` (WiX) or `.exe` (NSIS) |
+            | macOS | `.dmg` (Apple silicon and Intel builds) |
+            | Linux | `.AppImage` or `.deb` |
+
+            The binaries are unsigned: Windows SmartScreen and macOS Gatekeeper will warn on first launch
+            (on macOS use right-click → Open, or `xattr -dr com.apple.quarantine /Applications/MorseCode.app`).
+
+            See the README for the protocol and security model.
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: false
+          args: ${{ matrix.args }}
+
+  windows:
+    name: Windows (msi + nsis)
+    needs: bundle
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: x86_64-pc-windows-msvc
+
+      - run: npm ci
+
+      # Built by hand rather than through tauri-action so the output is teed to
+      # a file: Actions log archives are not always retrievable, and a silent
+      # Windows bundling failure is exactly what this project cannot afford.
+      - name: Build installers
+        shell: bash
+        run: npx tauri build --bundles msi,nsis 2>&1 | tee -a build.log
+
+      - name: Upload to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.inputs.version || github.ref_name }}"
+          for asset in src-tauri/target/release/bundle/msi/*.msi \
+                       src-tauri/target/release/bundle/nsis/*-setup.exe; do
+            [ -f "$asset" ] || continue
+            echo "uploading $asset"
+            gh release upload "$TAG" "$asset" --clobber
+          done
+
+      - name: Report failure
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY=$(printf '### Release failure — Windows installers\n\n```\n%s\n```\n' "$(tail -n 120 build.log)")
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$BODY" > /dev/null
+
+  windows-offline:
+    name: Windows (offline WebView2 setup)
+    needs: bundle
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: x86_64-pc-windows-msvc
+
+      - run: npm ci
+
+      # Same app, but the installer carries the full Edge WebView2 runtime so
+      # it can be installed on a PC that has never been online.
+      - name: Build NSIS installer with the bundled WebView2 runtime
+        shell: bash
+        run: npx tauri build --bundles nsis --config src-tauri/tauri.webview-offline.conf.json 2>&1 | tee -a build.log
+
+      - name: Upload to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.inputs.version || github.ref_name }}"
+          SRC=$(ls src-tauri/target/release/bundle/nsis/*-setup.exe | head -1)
+          DEST="MorseCode_${TAG#v}_x64-setup-offline-webview2.exe"
+          cp "$SRC" "$DEST"
+          gh release upload "$TAG" "$DEST" --clobber
+
+      - name: Report failure
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY=$(printf '### Release failure — Windows offline installer\n\n```\n%s\n```\n' "$(tail -n 120 build.log)")
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$BODY" > /dev/null

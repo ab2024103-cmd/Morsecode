@@ -1,0 +1,162 @@
+/* ===========================================================================
+   Theme A — CLASSIC
+   Soft rounded corners, layered elevation, Inter, card-based. Premium native
+   macOS / Linear feel. No clip-path shapes anywhere.
+   ======================================================================== */
+
+[data-theme='classic'] {
+  --font-body: var(--font-ui);
+  --font-chip: var(--font-ui);
+  --font-input: var(--font-ui);
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
+  --r-xl: 26px;
+
+  --panel-clip: none;
+  --chip-clip: none;
+  --btn-clip: none;
+  --radar-clip: none;
+  --morse-clip: none;
+  --label-transform: none;
+  --label-spacing: -0.005em;
+  --blur: none;
+  --glow: none;
+  --morse-unit-h: 8px;
+  --morse-dot-w: 8px;
+  --morse-dash-w: 26px;
+  --morse-unit-r: 999px;
+  --morse-line-h: 2px;
+  --progress-h: 7px;
+}
+
+/* ── dark ────────────────────────────────────────────────────────────────── */
+[data-theme='classic'][data-mode='dark'] {
+  --bg: #0a0908;
+  --surface: #171615;
+  --panel: #171615;
+  --card: #1c1b19;
+  --text: #f2f1ef;
+  --text-2: #a3a19e;
+  --muted: #6b6966;
+  --accent: #facc15;
+
+  --line: #26241f;
+  --line-strong: #332f28;
+  --hover: rgba(250, 204, 21, 0.07);
+  --active-bg: rgba(250, 204, 21, 0.11);
+  --active-line: rgba(250, 204, 21, 0.28);
+  --track: #2a2825;
+  --icon-bg: rgba(250, 204, 21, 0.12);
+  --input-bg: #121110;
+  --chip-bg: rgba(255, 255, 255, 0.03);
+  --drop-bg: rgba(255, 255, 255, 0.015);
+  --radar-bg: radial-gradient(circle at 50% 50%, #191715 0%, #0f0e0d 70%);
+  --radar-ring: rgba(250, 204, 21, 0.15);
+  --blip-label-bg: rgba(10, 9, 8, 0.85);
+  --log-bg: #121110;
+  --backdrop: rgba(5, 4, 3, 0.66);
+  --modal-bg: #1c1b19;
+  --toast-bg: #1c1b19;
+  --titlebar-bg: #0f0e0d;
+  --scroll-thumb: #332f28;
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 12px 30px -16px rgba(0, 0, 0, 0.9);
+  --select-glow: 0 0 0 3px rgba(250, 204, 21, 0.18);
+}
+
+/* ── light ───────────────────────────────────────────────────────────────── */
+[data-theme='classic'][data-mode='light'] {
+  --bg: #e8e5dd;
+  --surface: #f5f3ec;
+  --panel: #f5f3ec;
+  --card: #ffffff;
+  --text: #0f172a;
+  --text-2: #475569;
+  --muted: #94a3b8;
+  --accent: #eab308;
+
+  --line: #dcd7cb;
+  --line-strong: #c9c3b4;
+  --hover: rgba(234, 179, 8, 0.1);
+  --active-bg: rgba(234, 179, 8, 0.16);
+  --active-line: rgba(234, 179, 8, 0.4);
+  --track: #dcd7cb;
+  --icon-bg: rgba(234, 179, 8, 0.16);
+  --input-bg: #ffffff;
+  --chip-bg: rgba(255, 255, 255, 0.7);
+  --drop-bg: rgba(255, 255, 255, 0.5);
+  --radar-bg: radial-gradient(circle at 50% 50%, #ffffff 0%, #ece8de 72%);
+  --radar-ring: rgba(180, 83, 9, 0.18);
+  --blip-label-bg: rgba(255, 255, 255, 0.92);
+  --log-bg: #ffffff;
+  --backdrop: rgba(60, 52, 40, 0.34);
+  --modal-bg: #ffffff;
+  --toast-bg: #ffffff;
+  --titlebar-bg: #f0ede4;
+  --scroll-thumb: #c9c3b4;
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 14px 32px -18px rgba(28, 25, 20, 0.45);
+  --select-glow: 0 0 0 3px rgba(234, 179, 8, 0.22);
+}
+
+/* ── classic-only structural polish ──────────────────────────────────────── */
+[data-theme='classic'] .mark {
+  background: transparent;
+  box-shadow: 0 4px 14px -6px rgba(234, 88, 12, 0.7);
+}
+
+[data-theme='classic'] .sidebar,
+[data-theme='classic'] .panel {
+  box-shadow: var(--shadow);
+}
+
+[data-theme='classic'] .sb-item[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  left: -13px;
+  top: 50%;
+  translate: 0 -50%;
+  width: 3px;
+  height: 18px;
+  border-radius: 0 3px 3px 0;
+  background: var(--brand-gradient);
+}
+
+[data-theme='classic'] .device,
+[data-theme='classic'] .panel,
+[data-theme='classic'] .modal,
+[data-theme='classic'] .toast {
+  transition: box-shadow var(--speed), transform var(--speed), border-color var(--speed);
+}
+
+[data-theme='classic'] .device:hover {
+  box-shadow: 0 10px 24px -16px rgba(0, 0, 0, 0.65);
+}
+
+[data-theme='classic'] .btn.primary {
+  box-shadow: 0 6px 18px -10px rgba(234, 88, 12, 0.9);
+}
+
+[data-theme='classic'] .radar {
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme='classic'] .morse-unit {
+  box-shadow: 0 0 12px rgba(250, 204, 21, 0.5);
+}
+
+/* Soft page glow behind the app, classic flavour */
+[data-theme='classic'] .fx-bg {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(760px 420px at 12% -8%, color-mix(in srgb, var(--sun) 12%, transparent), transparent 70%),
+    radial-gradient(680px 420px at 96% 6%, color-mix(in srgb, var(--ember) 10%, transparent), transparent 72%);
+}
+
+[data-theme='classic'] .hud-only {
+  display: none !important;
+}

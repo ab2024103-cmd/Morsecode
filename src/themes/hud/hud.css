@@ -1,0 +1,394 @@
+/* ===========================================================================
+   Theme B — HUD (futuristic)
+   Angular clipped-corner panels, JetBrains Mono everywhere, glassmorphism,
+   scanlines, background grid, corner brackets, neon glow, tactical readouts.
+   ======================================================================== */
+
+[data-theme='hud'] {
+  --font-body: var(--font-mono);
+  --font-chip: var(--font-mono);
+  --font-input: var(--font-mono);
+
+  --r-sm: 0px;
+  --r-md: 0px;
+  --r-lg: 0px;
+  --r-xl: 0px;
+  --r-pill: 0px;
+
+  /* Notched hexagonal panel shape — the HUD signature. */
+  --panel-clip: polygon(
+    16px 0,
+    100% 0,
+    100% calc(100% - 16px),
+    calc(100% - 16px) 100%,
+    0 100%,
+    0 16px
+  );
+  --panel-clip-sm: polygon(
+    10px 0,
+    100% 0,
+    100% calc(100% - 10px),
+    calc(100% - 10px) 100%,
+    0 100%,
+    0 10px
+  );
+  --btn-clip: polygon(
+    7px 0,
+    100% 0,
+    100% calc(100% - 7px),
+    calc(100% - 7px) 100%,
+    0 100%,
+    0 7px
+  );
+  --chip-clip: polygon(
+    5px 0,
+    100% 0,
+    100% calc(100% - 5px),
+    calc(100% - 5px) 100%,
+    0 100%,
+    0 5px
+  );
+  --radar-clip: none;
+
+  --label-transform: uppercase;
+  --label-spacing: 0.14em;
+  --blur: blur(14px) saturate(120%);
+
+  --morse-unit-h: 6px;
+  --morse-dot-w: 6px;
+  --morse-dash-w: 30px;
+  --morse-unit-r: 0px;
+  --morse-clip: polygon(3px 0, 100% 0, calc(100% - 3px) 100%, 0 100%);
+  --morse-line-h: 1px;
+  --progress-h: 5px;
+  --speed: 140ms;
+}
+
+/* ── dark ────────────────────────────────────────────────────────────────── */
+[data-theme='hud'][data-mode='dark'] {
+  --bg: #050302;
+  --surface: rgba(12, 10, 8, 0.82);
+  --panel: rgba(12, 10, 8, 0.82);
+  --card: rgba(22, 18, 14, 0.75);
+  --text: #fbf6e8;
+  --text-2: #c9bc9a;
+  --muted: #7a6e52;
+  --accent: #facc15;
+  --accent-glow: 0 0 24px rgba(250, 204, 21, 0.55);
+  --glow: 0 0 18px rgba(250, 204, 21, 0.4);
+
+  --line: rgba(250, 204, 21, 0.17);
+  --line-strong: rgba(250, 204, 21, 0.34);
+  --hover: rgba(250, 204, 21, 0.09);
+  --active-bg: rgba(250, 204, 21, 0.14);
+  --active-line: rgba(250, 204, 21, 0.45);
+  --active-glow: 0 0 18px rgba(250, 204, 21, 0.18) inset;
+  --track: rgba(250, 204, 21, 0.12);
+  --icon-bg: rgba(250, 204, 21, 0.11);
+  --input-bg: rgba(0, 0, 0, 0.45);
+  --chip-bg: rgba(250, 204, 21, 0.05);
+  --drop-bg: rgba(250, 204, 21, 0.03);
+  --radar-bg: radial-gradient(circle at 50% 50%, rgba(250, 204, 21, 0.08) 0%, rgba(5, 3, 2, 0.95) 70%);
+  --radar-ring: rgba(250, 204, 21, 0.22);
+  --blip-label-bg: rgba(5, 3, 2, 0.8);
+  --log-bg: rgba(0, 0, 0, 0.42);
+  --backdrop: rgba(2, 1, 0, 0.74);
+  --modal-bg: rgba(14, 11, 8, 0.94);
+  --toast-bg: rgba(14, 11, 8, 0.92);
+  --titlebar-bg: rgba(8, 6, 4, 0.9);
+  --scroll-thumb: rgba(250, 204, 21, 0.28);
+  --shadow: 0 0 0 1px rgba(250, 204, 21, 0.06) inset, 0 18px 50px -30px rgba(250, 204, 21, 0.35);
+  --select-glow: 0 0 22px rgba(250, 204, 21, 0.35);
+  --bracket: rgba(250, 204, 21, 0.55);
+  --grid-line: rgba(250, 204, 21, 0.055);
+  --scan: rgba(250, 204, 21, 0.035);
+}
+
+/* ── light ───────────────────────────────────────────────────────────────── */
+[data-theme='hud'][data-mode='light'] {
+  --bg: #e5e0d0;
+  --surface: rgba(255, 255, 255, 0.85);
+  --panel: rgba(255, 255, 255, 0.85);
+  --card: rgba(255, 255, 255, 0.88);
+  --text: #1a1510;
+  --text-2: #4a4030;
+  --muted: #8a7e60;
+  --accent: #b45309;
+  --accent-glow: 0 0 20px rgba(180, 83, 9, 0.28);
+  --glow: 0 0 14px rgba(180, 83, 9, 0.22);
+
+  --line: rgba(180, 83, 9, 0.24);
+  --line-strong: rgba(180, 83, 9, 0.42);
+  --hover: rgba(180, 83, 9, 0.09);
+  --active-bg: rgba(180, 83, 9, 0.14);
+  --active-line: rgba(180, 83, 9, 0.5);
+  --active-glow: 0 0 14px rgba(180, 83, 9, 0.12) inset;
+  --track: rgba(180, 83, 9, 0.16);
+  --icon-bg: rgba(180, 83, 9, 0.12);
+  --input-bg: rgba(255, 255, 255, 0.78);
+  --chip-bg: rgba(255, 255, 255, 0.6);
+  --drop-bg: rgba(255, 255, 255, 0.45);
+  --radar-bg: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.95) 0%, rgba(226, 219, 200, 0.9) 72%);
+  --radar-ring: rgba(180, 83, 9, 0.24);
+  --blip-label-bg: rgba(255, 255, 255, 0.9);
+  --log-bg: rgba(255, 255, 255, 0.72);
+  --backdrop: rgba(60, 48, 30, 0.42);
+  --modal-bg: rgba(255, 253, 248, 0.97);
+  --toast-bg: rgba(255, 253, 248, 0.96);
+  --titlebar-bg: rgba(255, 255, 255, 0.72);
+  --scroll-thumb: rgba(180, 83, 9, 0.35);
+  --shadow: 0 0 0 1px rgba(180, 83, 9, 0.08) inset, 0 16px 40px -28px rgba(120, 60, 10, 0.5);
+  --select-glow: 0 0 18px rgba(180, 83, 9, 0.28);
+  --bracket: rgba(180, 83, 9, 0.6);
+  --grid-line: rgba(120, 70, 20, 0.07);
+  --scan: rgba(120, 70, 20, 0.03);
+}
+
+/* ── background field: grid + drifting glow blobs + scanlines + noise ────── */
+[data-theme='hud'] .fx-bg {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 46px 46px, 46px 46px;
+}
+
+[data-theme='hud'] .fx-bg::before {
+  content: '';
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(420px 420px at 18% 22%, color-mix(in srgb, var(--sun) 16%, transparent), transparent 70%),
+    radial-gradient(520px 520px at 82% 68%, color-mix(in srgb, var(--ember) 14%, transparent), transparent 72%),
+    radial-gradient(360px 360px at 62% 12%, color-mix(in srgb, var(--amber) 10%, transparent), transparent 70%);
+  filter: blur(22px);
+  animation: drift 26s ease-in-out infinite alternate;
+}
+
+@keyframes drift {
+  from {
+    transform: translate3d(-2%, -1%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(3%, 2%, 0) scale(1.08);
+  }
+}
+
+[data-theme='hud'] .fx-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--scan) 0px,
+    var(--scan) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: overlay;
+  animation: scan-drift 8s linear infinite;
+}
+
+@keyframes scan-drift {
+  to {
+    background-position-y: 24px;
+  }
+}
+
+/* ── corner brackets on every panel-like surface ─────────────────────────── */
+[data-theme='hud'] .panel,
+[data-theme='hud'] .sidebar,
+[data-theme='hud'] .modal,
+[data-theme='hud'] .radar,
+[data-theme='hud'] .dropzone,
+[data-theme='hud'] .toast,
+[data-theme='hud'] .tray-pop {
+  position: relative;
+}
+
+[data-theme='hud'] .panel::before,
+[data-theme='hud'] .sidebar::before,
+[data-theme='hud'] .modal::before,
+[data-theme='hud'] .dropzone::before,
+[data-theme='hud'] .toast::before,
+[data-theme='hud'] .tray-pop::before {
+  content: '';
+  position: absolute;
+  right: 5px;
+  top: 5px;
+  width: 15px;
+  height: 15px;
+  border-right: 1px solid var(--bracket);
+  border-top: 1px solid var(--bracket);
+  pointer-events: none;
+  z-index: 4;
+}
+
+[data-theme='hud'] .panel::after,
+[data-theme='hud'] .sidebar::after,
+[data-theme='hud'] .modal::after,
+[data-theme='hud'] .dropzone::after,
+[data-theme='hud'] .toast::after,
+[data-theme='hud'] .tray-pop::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  bottom: 5px;
+  width: 15px;
+  height: 15px;
+  border-left: 1px solid var(--bracket);
+  border-bottom: 1px solid var(--bracket);
+  pointer-events: none;
+  z-index: 4;
+}
+
+[data-theme='hud'] .radar {
+  border-radius: 0;
+  clip-path: var(--panel-clip);
+}
+
+[data-theme='hud'] .radar-sweep {
+  border-radius: 0;
+}
+
+[data-theme='hud'] .radar::before,
+[data-theme='hud'] .radar::after {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-color: var(--bracket);
+  border-style: solid;
+  z-index: 4;
+}
+[data-theme='hud'] .radar::before {
+  right: 8px;
+  top: 8px;
+  border-width: 1px 1px 0 0;
+}
+[data-theme='hud'] .radar::after {
+  left: 8px;
+  bottom: 8px;
+  border-width: 0 0 1px 1px;
+}
+
+/* ── typography & chrome ─────────────────────────────────────────────────── */
+[data-theme='hud'] body,
+[data-theme='hud'] .screen-title,
+[data-theme='hud'] .tb-name {
+  letter-spacing: var(--label-spacing);
+}
+
+[data-theme='hud'] .screen-title {
+  font-size: 19px;
+  font-weight: 700;
+}
+
+[data-theme='hud'] .screen-title::before {
+  content: '// ';
+  color: var(--accent);
+}
+
+[data-theme='hud'] .panel-title::before {
+  content: '▚ ';
+  color: var(--accent);
+  opacity: 0.8;
+}
+
+[data-theme='hud'] .titlebar {
+  border-bottom: 1px solid var(--line-strong);
+  backdrop-filter: var(--blur);
+}
+
+[data-theme='hud'] .mark {
+  padding: 2px;
+  background: rgba(250, 204, 21, 0.1);
+  box-shadow: var(--accent-glow);
+}
+
+[data-theme='hud'] .btn {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+
+[data-theme='hud'] .btn:hover:not(:disabled) {
+  box-shadow: var(--glow);
+}
+
+[data-theme='hud'] .sb-item {
+  font-size: 11.5px;
+}
+
+[data-theme='hud'] .sb-item[aria-current='page'] {
+  text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+[data-theme='hud'] .device-name,
+[data-theme='hud'] .txrow-name {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+/* ── radar tactical extras ───────────────────────────────────────────────── */
+[data-theme='hud'] .radar {
+  box-shadow: inset 0 0 60px color-mix(in srgb, var(--accent) 12%, transparent), var(--glow);
+}
+
+[data-theme='hud'] .radar-readout {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.16em;
+  color: var(--accent);
+  opacity: 0.85;
+  text-transform: uppercase;
+  z-index: 4;
+}
+[data-theme='hud'] .radar-readout[data-pos='tl'] {
+  left: 30px;
+  top: 12px;
+}
+[data-theme='hud'] .radar-readout[data-pos='tr'] {
+  right: 30px;
+  top: 12px;
+}
+[data-theme='hud'] .radar-readout[data-pos='bl'] {
+  left: 30px;
+  bottom: 12px;
+}
+[data-theme='hud'] .radar-readout[data-pos='br'] {
+  right: 30px;
+  bottom: 12px;
+}
+
+[data-theme='hud'] .blip-dot {
+  box-shadow: 0 0 14px var(--accent);
+}
+
+/* ── glow accents ────────────────────────────────────────────────────────── */
+[data-theme='hud'] .stat-big {
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--accent) 45%, transparent));
+}
+
+[data-theme='hud'] .progress > i::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.22) 0 2px,
+    transparent 2px 6px
+  );
+}
+
+[data-theme='hud'] .log {
+  text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+[data-theme='hud'] .classic-only {
+  display: none !important;
+}
