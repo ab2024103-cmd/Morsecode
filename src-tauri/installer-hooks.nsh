@@ -9,9 +9,9 @@
   DetailPrint "Allowing MorseCode through Windows Firewall (private networks)..."
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="MorseCode"'
   Pop $0
-  nsExec::ExecToLog 'netsh advfirewall firewall add rule name="MorseCode" dir=in action=allow program="$INSTDIR\MorseCode.exe" enable=yes profile=private,domain description="MorseCode LAN file transfer (TCP 33456, UDP 33457)"'
+  nsExec::ExecToLog 'netsh advfirewall firewall add rule name="MorseCode" dir=in action=allow program="$INSTDIR\morsecode.exe" enable=yes profile=private,domain description="MorseCode LAN file transfer (TCP 33456, UDP 33457)"'
   Pop $0
-  nsExec::ExecToLog 'netsh advfirewall firewall add rule name="MorseCode" dir=out action=allow program="$INSTDIR\MorseCode.exe" enable=yes profile=private,domain'
+  nsExec::ExecToLog 'netsh advfirewall firewall add rule name="MorseCode" dir=out action=allow program="$INSTDIR\morsecode.exe" enable=yes profile=private,domain'
   Pop $0
 !macroend
 

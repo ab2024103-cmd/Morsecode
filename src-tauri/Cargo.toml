@@ -1,6 +1,6 @@
 [package]
 name = "morsecode"
-version = "1.0.4"
+version = "1.0.5"
 description = "Peer-to-peer LAN file transfer. Local. Fast. No internet required."
 authors = ["MorseCode"]
 edition = "2021"
@@ -56,6 +56,11 @@ windows-sys = { version = "0.59", features = [
   "Win32_Foundation",
   "Win32_UI_WindowsAndMessaging",
 ] }
+
+[dev-dependencies]
+# `test` gives us tauri::test::mock_builder(), which builds the real app
+# (real config, real plugins) without a display server.
+tauri = { version = "2", features = ["test"] }
 
 [features]
 # Ship the smallest possible binary by default.

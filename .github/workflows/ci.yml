@@ -84,6 +84,11 @@ jobs:
         run: cargo check --all-targets --message-format short 2>&1 | tee -a ../ci.log
         working-directory: src-tauri
 
+      - name: cargo test (app initialises with the shipped config)
+        shell: bash
+        run: cargo test --all-targets --message-format short 2>&1 | tee -a ../ci.log
+        working-directory: src-tauri
+
       - name: cargo clippy
         shell: bash
         run: cargo clippy --all-targets --message-format short 2>&1 | tee -a ../ci.log
