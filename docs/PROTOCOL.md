@@ -8,10 +8,15 @@ tracker, relay, STUN/TURN or update endpoint anywhere in the app.
 | Transport | Details |
 |---|---|
 | mDNS (primary) | Service type `_morsecode._tcp.local.`, TXT records `id`, `name`, `fp` (fingerprint), `platform`, `v`. Browsed continuously; peers are re-announced on a ~1200 ms sweep (configurable 400–5000 ms). |
-| UDP broadcast (fallback) | JSON beacon on port **33457** (`SO_BROADCAST`, `SO_REUSEADDR`/`SO_REUSEPORT`), same fields plus `ts`. Used when multicast is filtered. |
+| UDP broadcast (fallback) | JSON beacon on port **33457** (`SO_BROADCAST`, `SO_REUSEADDR`/`SO_REUSEPORT`), same fields plus `ts` and `unicast`. Sent to `255.255.255.255` **and** every interface's /24 directed broadcast (hotspots often forward only one of the two), plus a directed unicast beacon to every already-known peer. A broadcast beacon is answered with a direct unicast reply (`unicast: true`, never re-answered) — the `:33457 → :33457` reply passes the sender's stateful firewall as return traffic even where inbound broadcast is filtered. Peers on 1.0.5 and older ignore the `unicast` field and simply never reply. |
 | Manual connect | Direct `ip:port` probe: TCP connect → handshake → read the peer card → hang up. |
 
-Peers that stop announcing for 9 s are dropped (`morse://device-lost`).
+Peers that stop announcing for 9 s are **verified before removal**: a bare TCP
+connect (closed without sending a byte — the receiver logs nothing for these)
+is attempted against their transfer port, and only peers that fail to answer
+within 1.5 s are dropped (`morse://device-lost`). This keeps a peer on the
+radar on networks where broadcast/multicast crosses in only one direction
+(phone hotspots, guest Wi-Fi) while direct TCP still works.
 Signal strength shown on the radar is derived from beacon latency; it places
 the blip's radius (strong = close to the centre).
 

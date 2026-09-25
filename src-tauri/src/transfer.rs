@@ -607,6 +607,16 @@ pub async fn serve(state: Arc<AppState>) -> Result<()> {
 async fn handle_inbound(state: Arc<AppState>, mut stream: TcpStream, addr: String) -> Result<()> {
     stream.set_nodelay(true)?;
     let ip = addr.split(':').next().unwrap_or("0.0.0.0").to_string();
+
+    // Discovery keepalive probes just connect and hang up without sending a
+    // byte — don't log those as sessions or feed them to the handshake.
+    let mut first = [0u8; 1];
+    match tokio::time::timeout(Duration::from_secs(10), stream.peek(&mut first)).await {
+        Ok(Ok(0)) | Err(_) => return Ok(()), // closed with no data, or idle
+        Ok(Err(err)) => return Err(err.into()),
+        Ok(Ok(_)) => {}
+    }
+
     state.log(LogLevel::Info, "NET", format!("inbound connection from {addr}"));
 
     let (session, peer) = handshake(&mut stream, &state, Role::Responder).await?;

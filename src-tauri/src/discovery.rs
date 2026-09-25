@@ -30,6 +30,12 @@ struct Beacon {
     fingerprint: String,
     port: u16,
     ts: u64,
+    /// True when this beacon was sent point-to-point (a reply or a directed
+    /// keepalive). Unicast beacons are never answered, which prevents two
+    /// peers from ping-ponging replies forever. Old versions simply ignore
+    /// the field (serde skips unknown keys) and never reply at all.
+    #[serde(default)]
+    unicast: bool,
 }
 
 pub fn local_ip() -> String {
@@ -98,17 +104,54 @@ pub async fn start(state: Arc<AppState>) -> Result<()> {
                 break;
             }
             let cutoff = now_ms().saturating_sub(9_000);
-            let stale: Vec<String> = reaper
+            let stale: Vec<(String, String, String, u16)> = reaper
                 .devices
                 .read()
                 .await
                 .values()
                 .filter(|device| device.last_seen < cutoff)
-                .map(|device| device.id.clone())
+                .map(|device| {
+                    (
+                        device.id.clone(),
+                        device.name.clone(),
+                        device.ip.clone(),
+                        device.port,
+                    )
+                })
                 .collect();
-            for id in stale {
-                reaper.drop_device(&id).await;
-                reaper.log(LogLevel::Warn, "MDNS", format!("peer {id} timed out"));
+            for (id, name, ip, port) in stale {
+                // Broadcast/multicast is filtered on plenty of networks
+                // (phone hotspots, guest Wi-Fi, strict firewalls) while
+                // direct TCP works fine — transfers prove it. So before
+                // declaring a peer dead, knock on its transfer port; if it
+                // answers, it is alive and only its announcements are being
+                // eaten, so keep it on the radar.
+                let alive = tokio::time::timeout(
+                    Duration::from_millis(1500),
+                    tokio::net::TcpStream::connect((ip.as_str(), port)),
+                )
+                .await
+                .map(|res| res.is_ok())
+                .unwrap_or(false);
+                if alive {
+                    let refreshed = {
+                        let mut devices = reaper.devices.write().await;
+                        devices.get_mut(&id).map(|device| {
+                            device.last_seen = now_ms();
+                            device.clone()
+                        })
+                    };
+                    if let Some(device) = refreshed {
+                        reaper.upsert_device(device).await;
+                    }
+                } else {
+                    reaper.drop_device(&id).await;
+                    reaper.log(
+                        LogLevel::Warn,
+                        "MDNS",
+                        format!("peer {name} ({id}) unreachable — removed"),
+                    );
+                }
             }
         }
     });
@@ -199,11 +242,19 @@ async fn run_mdns(state: Arc<AppState>) -> Result<()> {
                         .to_string(),
                     last_seen: now_ms(),
                 };
-                state.log(
-                    LogLevel::Ok,
-                    "MDNS",
-                    format!("peer found — {} @ {}:{}", device.name, device.ip, device.port),
-                );
+                // mDNS resolves the same service once per interface/record,
+                // so only log when the peer is new or moved.
+                let newly_seen = match state.device(&device.id).await {
+                    Some(known) => known.ip != device.ip || known.port != device.port,
+                    None => true,
+                };
+                if newly_seen {
+                    state.log(
+                        LogLevel::Ok,
+                        "MDNS",
+                        format!("peer found — {} @ {}:{}", device.name, device.ip, device.port),
+                    );
+                }
                 state.upsert_device(device).await;
             }
             ServiceEvent::ServiceRemoved(_, fullname) => {
@@ -213,6 +264,36 @@ async fn run_mdns(state: Arc<AppState>) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Everywhere a beacon should go: the limited broadcast plus the /24
+/// directed broadcast of every local IPv4 interface. Hotspots and some APs
+/// silently drop 255.255.255.255 but forward the subnet-directed form (the
+/// /24 guess covers the overwhelming majority of home/hotspot LANs; on wider
+/// subnets the limited broadcast still applies).
+fn broadcast_dests() -> Vec<SocketAddr> {
+    let mut dests = vec![SocketAddr::new(
+        IpAddr::V4(Ipv4Addr::BROADCAST),
+        DISCOVERY_PORT,
+    )];
+    if let Ok(list) = local_ip_address::list_afinet_netifas() {
+        for (_, ip) in list {
+            if let IpAddr::V4(v4) = ip {
+                if v4.is_loopback() {
+                    continue;
+                }
+                let o = v4.octets();
+                let addr = SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(o[0], o[1], o[2], 255)),
+                    DISCOVERY_PORT,
+                );
+                if !dests.contains(&addr) {
+                    dests.push(addr);
+                }
+            }
+        }
+    }
+    dests
 }
 
 fn broadcast_socket() -> Result<std::net::UdpSocket> {
@@ -249,9 +330,42 @@ async fn run_udp(state: Arc<AppState>) -> Result<()> {
                 fingerprint: tx_state.identity.fingerprint.clone(),
                 port: settings.transfer_port,
                 ts: now_ms(),
+                unicast: false,
             };
             if let Ok(payload) = serde_json::to_vec(&beacon) {
                 let _ = tx_socket.send_to(&payload, dest).await;
+                for extra in broadcast_dests() {
+                    if extra != dest {
+                        let _ = tx_socket.send_to(&payload, extra).await;
+                    }
+                }
+            }
+            // Also beacon every peer we already know point-to-point:
+            // unicast survives networks that filter broadcast entirely, so
+            // a peer discovered even once (mDNS, inbound transfer, manual
+            // connect) keeps getting refreshed instead of timing out.
+            let known: Vec<String> = tx_state
+                .devices
+                .read()
+                .await
+                .values()
+                .map(|device| device.ip.clone())
+                .collect();
+            if !known.is_empty() {
+                let direct = Beacon {
+                    unicast: true,
+                    ts: now_ms(),
+                    ..beacon.clone()
+                };
+                if let Ok(payload) = serde_json::to_vec(&direct) {
+                    for ip in known {
+                        if let Ok(ip) = ip.parse::<IpAddr>() {
+                            let _ = tx_socket
+                                .send_to(&payload, SocketAddr::new(ip, DISCOVERY_PORT))
+                                .await;
+                        }
+                    }
+                }
             }
             tokio::time::sleep(Duration::from_millis(settings.scan_interval_ms.max(400))).await;
         }
@@ -278,6 +392,29 @@ async fn run_udp(state: Arc<AppState>) -> Result<()> {
         };
         if beacon.id == state.identity.id {
             continue;
+        }
+        // Answer broadcast beacons with a direct unicast reply. The sender
+        // just emitted a datagram from :33457, so its stateful firewall
+        // accepts our :33457 → :33457 answer as return traffic even when it
+        // filters inbound broadcast — this is what keeps the radar alive on
+        // hotspot networks where broadcast only crosses in one direction.
+        // Replies are flagged `unicast` and never answered themselves.
+        if !beacon.unicast {
+            let settings = state.settings_snapshot().await;
+            let reply = Beacon {
+                id: state.identity.id.clone(),
+                name: settings.device_name.clone(),
+                platform: format!("{:?}", Platform::current()).to_lowercase(),
+                fingerprint: state.identity.fingerprint.clone(),
+                port: settings.transfer_port,
+                ts: now_ms(),
+                unicast: true,
+            };
+            if let Ok(payload) = serde_json::to_vec(&reply) {
+                let _ = socket
+                    .send_to(&payload, SocketAddr::new(from.ip(), DISCOVERY_PORT))
+                    .await;
+            }
         }
         let latency = now_ms().saturating_sub(beacon.ts);
         let ip = from.ip().to_string();
