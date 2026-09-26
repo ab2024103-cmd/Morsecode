@@ -30,7 +30,6 @@ export function TransferRow({ item }: { item: TransferItem }) {
   const resume = useTransferStore((s) => s.resume);
   const cancel = useTransferStore((s) => s.cancel);
   const progress = pct(item.transferred, item.size);
-  const done = item.status === 'done';
 
   return (
     <div className="txrow">
@@ -58,6 +57,11 @@ export function TransferRow({ item }: { item: TransferItem }) {
           {item.status === 'active' && <span>{formatSpeed(item.speed)}</span>}
           {item.status === 'active' && <span>eta {formatEta(item.size - item.transferred, item.speed)}</span>}
           {item.status === 'paused' && <span>resume @ {formatBytes(item.resumeOffset)}</span>}
+          {item.status === 'failed' && item.error && (
+            <span className="txrow-err" title={item.error}>
+              {item.error}
+            </span>
+          )}
           {item.compressed && <span>zstd</span>}
           <span className="spacer" />
           <span>{item.deviceName}</span>
@@ -65,11 +69,14 @@ export function TransferRow({ item }: { item: TransferItem }) {
       </div>
 
       <div className="txrow-actions">
-        {!done && item.status !== 'paused' && (
+        {(item.status === 'queued' || item.status === 'handshaking' || item.status === 'active') && (
           <IconButton icon="pause" label="Pause" onClick={() => void pause(item.id)} />
         )}
         {item.status === 'paused' && (
           <IconButton icon="play" label="Resume" onClick={() => void resume(item.id)} />
+        )}
+        {item.status === 'failed' && item.direction === 'send' && (
+          <IconButton icon="refresh" label="Retry" onClick={() => void resume(item.id)} />
         )}
         <IconButton icon="x" label="Remove" onClick={() => void cancel(item.id)} />
       </div>

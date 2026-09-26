@@ -87,10 +87,32 @@ pub async fn pause_transfer(state: Shared<'_>, id: String) -> Result<(), String>
 #[tauri::command]
 pub async fn resume_transfer(state: Shared<'_>, id: String) -> Result<(), String> {
     state.paused_items.write().await.insert(id.clone(), false);
-    state
-        .update_transfer(&id, |t| t.status = TransferStatus::Queued)
-        .await;
-    Ok(())
+    match state.transfer(&id).await {
+        // A failed item has no live session left polling the pause flag —
+        // setting it back to "queued" would leave it stuck forever. Spawn a
+        // fresh session instead; the receiver's .mcpart offsets resume it.
+        Some(item) if matches!(item.status, TransferStatus::Failed) => {
+            if matches!(item.direction, Direction::Send) {
+                transfer::retry_send(state.inner().clone(), id)
+                    .await
+                    .map_err(err)
+            } else {
+                state.log(
+                    LogLevel::Warn,
+                    "RX",
+                    "a failed download can only be retried from the sending device",
+                );
+                Ok(())
+            }
+        }
+        // Paused with a live session: the streaming loop picks it up.
+        _ => {
+            state
+                .update_transfer(&id, |t| t.status = TransferStatus::Queued)
+                .await;
+            Ok(())
+        }
+    }
 }
 
 #[tauri::command]

@@ -220,10 +220,18 @@ pub async fn enqueue_send(
             state.put_transfer(item).await;
         }
 
-        let task_state = state.clone();
-        let task_device = device.clone();
-        tokio::spawn(async move {
-            if let Err(err) = run_send_session(task_state.clone(), task_device.clone(), items.clone()).await {
+        spawn_send_session(state.clone(), device.clone(), items);
+    }
+    Ok(created)
+}
+
+/// Runs one send session in the background, failing its items visibly if the
+/// session dies. Used by fresh sends and by retries alike.
+fn spawn_send_session(state: Arc<AppState>, device: Device, items: Vec<TransferItem>) {
+    let task_state = state;
+    let task_device = device;
+    tokio::spawn(async move {
+        if let Err(err) = run_send_session(task_state.clone(), task_device.clone(), items.clone()).await {
                 task_state.log(
                     LogLevel::Error,
                     "TX",
@@ -257,11 +265,40 @@ pub async fn enqueue_send(
                         })
                         .await;
                 }
-                task_state.notify("error", "Transfer failed", &task_device.name);
-            }
-        });
+            task_state.notify("error", "Transfer failed", &task_device.name);
+        }
+    });
+}
+
+/// Re-runs one dead send item in a fresh session. The receiver's `.mcpart`
+/// offsets make it pick up where the old session died.
+pub async fn retry_send(state: Arc<AppState>, item_id: String) -> Result<()> {
+    let Some(mut item) = state.transfer(&item_id).await else {
+        return Err(anyhow!("transfer no longer exists"));
+    };
+    if item.direction != Direction::Send {
+        return Err(anyhow!(
+            "a failed download can only be retried from the sending device"
+        ));
     }
-    Ok(created)
+    let device = state
+        .device(&item.device_id)
+        .await
+        .ok_or_else(|| anyhow!("{} is not reachable right now", item.device_name))?;
+
+    state.cancelled_items.write().await.insert(item.id.clone(), false);
+    state.paused_items.write().await.insert(item.id.clone(), false);
+    item.status = TransferStatus::Queued;
+    item.error = None;
+    item.speed = 0.0;
+    state.put_transfer(item.clone()).await;
+    state.log(
+        LogLevel::Info,
+        "TX",
+        format!("retrying {} → {}", item.name, device.name),
+    );
+    spawn_send_session(state, device, vec![item]);
+    Ok(())
 }
 
 async fn run_send_session(
@@ -900,10 +937,13 @@ async fn handle_inbound(state: Arc<AppState>, mut stream: TcpStream, addr: Strin
                     if let Some(item) = items.get(&file_id) {
                         state
                             .update_transfer(&item.id, |t| {
-                                t.status = TransferStatus::Paused;
+                                // Failed, not paused: this side cannot pull, so
+                                // a "resume" button here would do nothing. The
+                                // .mcpart stays; the sender's retry resumes it.
+                                t.status = TransferStatus::Failed;
                                 t.speed = 0.0;
                                 t.resume_offset = written;
-                                t.error = Some(err.to_string());
+                                t.error = Some(format!("{err} — sender can retry to resume"));
                             })
                             .await;
                     }

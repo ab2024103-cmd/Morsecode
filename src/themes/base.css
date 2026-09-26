@@ -1219,6 +1219,14 @@ textarea {
   color: var(--muted);
 }
 
+.txrow-err {
+  color: var(--err, #e5484d);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+
 .txrow-actions {
   display: flex;
   gap: 5px;
