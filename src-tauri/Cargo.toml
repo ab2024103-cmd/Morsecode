@@ -1,6 +1,6 @@
 [package]
 name = "morsecode"
-version = "1.0.5"
+version = "1.0.6"
 description = "Peer-to-peer LAN file transfer. Local. Fast. No internet required."
 authors = ["MorseCode"]
 edition = "2021"

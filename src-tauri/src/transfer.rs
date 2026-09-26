@@ -27,6 +27,15 @@ use crate::state::{events, AppState, Decision};
 const PART_SUFFIX: &str = ".mcpart";
 const ACK_EVERY_BYTES: u64 = 2 * 1024 * 1024;
 const PROGRESS_EVERY: Duration = Duration::from_millis(250);
+/// Any single socket write must complete within this or the link is dead.
+const IO_TIMEOUT: Duration = Duration::from_secs(30);
+/// A receiver that hears nothing for this long treats the session as dropped
+/// (sender-side pauses emit keepalives, so a healthy session never idles).
+const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+/// The receiver's consent modal auto-rejects at 120 s; give it headroom.
+const CONSENT_WAIT: Duration = Duration::from_secs(150);
+/// While paused, the sender pings so the receiver's idle timer keeps resetting.
+const PAUSE_KEEPALIVE: Duration = Duration::from_secs(5);
 /// Assumed link ceiling used as the 100% reference for the bandwidth slider.
 const REFERENCE_BPS: f64 = 125.0 * 1024.0 * 1024.0; // ~1 Gbps
 
@@ -136,6 +145,30 @@ async fn recv_control(stream: &mut TcpStream, session: &Session) -> Result<Contr
     decode_control(&session.open(&frame.payload)?)
 }
 
+/// `send_control`, but a stalled socket fails instead of hanging forever
+/// (a yanked cable / dead Wi-Fi leaves TCP retrying for many minutes).
+async fn send_control_timed(
+    stream: &mut TcpStream,
+    session: &Session,
+    seq: u32,
+    control: &Control,
+) -> Result<()> {
+    tokio::time::timeout(IO_TIMEOUT, send_control(stream, session, seq, control))
+        .await
+        .map_err(|_| anyhow!("connection lost (send timed out after {}s)", IO_TIMEOUT.as_secs()))?
+}
+
+/// `recv_control` with an explicit patience budget.
+async fn recv_control_timed(
+    stream: &mut TcpStream,
+    session: &Session,
+    wait: Duration,
+) -> Result<Control> {
+    tokio::time::timeout(wait, recv_control(stream, session))
+        .await
+        .map_err(|_| anyhow!("connection lost (no data for {}s)", wait.as_secs()))?
+}
+
 // ── outbound ────────────────────────────────────────────────────────────────
 
 /// Probe used by "manual connect": handshake, read the peer card, hang up.
@@ -197,6 +230,13 @@ pub async fn enqueue_send(
                     format!("session with {} failed: {err}", task_device.name),
                 );
                 for item in items {
+                    // Skip files that already finished before the failure,
+                    // and files the user cancelled (no longer tracked).
+                    match task_state.transfer(&item.id).await {
+                        None => continue,
+                        Some(t) if matches!(t.status, TransferStatus::Done) => continue,
+                        Some(_) => {}
+                    }
                     task_state
                         .update_transfer(&item.id, |t| {
                             t.status = TransferStatus::Failed;
@@ -237,7 +277,12 @@ async fn run_send_session(
             .await;
     }
 
-    let mut stream = TcpStream::connect(format!("{}:{}", device.ip, device.port)).await?;
+    let mut stream = tokio::time::timeout(
+        Duration::from_secs(10),
+        TcpStream::connect(format!("{}:{}", device.ip, device.port)),
+    )
+    .await
+    .map_err(|_| anyhow!("connection to {}:{} timed out", device.ip, device.port))??;
     stream.set_nodelay(true)?;
     let (session, peer) = handshake(&mut stream, &state, Role::Initiator).await?;
 
@@ -258,7 +303,7 @@ async fn run_send_session(
     }
     let total_bytes: u64 = offers.iter().map(|f| f.size).sum();
 
-    send_control(
+    send_control_timed(
         &mut stream,
         &session,
         2,
@@ -279,8 +324,9 @@ async fn run_send_session(
         ),
     );
 
-    // Receiver's Accept/Reject verdict.
-    match recv_control(&mut stream, &session).await? {
+    // Receiver's Accept/Reject verdict. Bounded: if the peer's app died with
+    // the consent modal open we fail instead of holding "queued" forever.
+    match recv_control_timed(&mut stream, &session, CONSENT_WAIT).await? {
         Control::Decision { accept: true, .. } => {}
         Control::Decision { accept: false, reason } => {
             let why = reason.unwrap_or_else(|| "rejected by peer".into());
@@ -300,7 +346,7 @@ async fn run_send_session(
     }
 
     // Resume offsets reported by the receiver.
-    let resume: HashMap<String, u64> = match recv_control(&mut stream, &session).await? {
+    let resume: HashMap<String, u64> = match recv_control_timed(&mut stream, &session, IDLE_TIMEOUT).await? {
         Control::ResumeState { offsets } => offsets.into_iter().collect(),
         other => return Err(anyhow!("expected ResumeState, got {other:?}")),
     };
@@ -309,6 +355,19 @@ async fn run_send_session(
     for offer in &offers {
         let item = by_file_id.get(&offer.file_id).expect("offer maps to an item");
         if state.is_item_cancelled(&item.id).await {
+            // Tell the receiver, or its side of this file sits at "queued"
+            // until the session ends.
+            send_control_timed(
+                &mut stream,
+                &session,
+                seq,
+                &Control::Cancel {
+                    file_id: Some(offer.file_id.clone()),
+                    reason: Some("cancelled by sender".into()),
+                },
+            )
+            .await?;
+            seq += 1;
             continue;
         }
         let start_offset = if settings.resume_enabled {
@@ -324,7 +383,7 @@ async fn run_send_session(
             );
         }
 
-        send_control(
+        send_control_timed(
             &mut stream,
             &session,
             seq,
@@ -347,7 +406,7 @@ async fn run_send_session(
             })
             .await;
 
-        seq = stream_file(
+        let (next_seq, completed) = stream_file(
             &state,
             &mut stream,
             &session,
@@ -358,6 +417,13 @@ async fn run_send_session(
             &settings,
         )
         .await?;
+        seq = next_seq;
+
+        if !completed {
+            // Cancelled mid-file by our user; the receiver has been told.
+            state.log(LogLevel::Warn, "TX", format!("{} cancelled", item.name));
+            continue;
+        }
 
         let duration = now_ms().saturating_sub(started);
         state
@@ -384,7 +450,7 @@ async fn run_send_session(
         state.notify("success", "Transfer complete", &format!("{} → {}", item.name, device.name));
     }
 
-    send_control(&mut stream, &session, seq, &Control::Bye).await?;
+    send_control_timed(&mut stream, &session, seq, &Control::Bye).await?;
     crate::tray::refresh_activity(&state).await;
     Ok(())
 }
@@ -402,6 +468,9 @@ enum Prepared {
     Eof { crc32: u32 },
 }
 
+/// Streams one file. Returns `(next_seq, completed)` — `completed == false`
+/// means the user cancelled and the receiver was told; the session continues
+/// with the remaining files.
 #[allow(clippy::too_many_arguments)]
 async fn stream_file(
     state: &Arc<AppState>,
@@ -412,7 +481,7 @@ async fn stream_file(
     offer: &FileOffer,
     start_offset: u64,
     settings: &Settings,
-) -> Result<u32> {
+) -> Result<(u32, bool)> {
     let mut file = File::open(&item.path).await?;
 
     // Prepared-chunk pipeline: reading + compressing runs up to
@@ -488,8 +557,19 @@ async fn stream_file(
             }
             Prepared::Chunk { offset, payload, compressed } => {
                 if state.is_item_cancelled(&item.id).await {
-                    return Err(anyhow!("cancelled by user"));
+                    send_control_timed(
+                        stream,
+                        session,
+                        seq,
+                        &Control::Cancel {
+                            file_id: Some(offer.file_id.clone()),
+                            reason: Some("cancelled by sender".into()),
+                        },
+                    )
+                    .await?;
+                    return Ok((seq + 1, false));
                 }
+                let mut last_keepalive = Instant::now();
                 while state.is_item_paused(&item.id).await {
                     state
                         .update_transfer(&item.id, |t| {
@@ -497,13 +577,37 @@ async fn stream_file(
                             t.speed = 0.0;
                         })
                         .await;
+                    // Keep the receiver's idle timer fed so a long pause is
+                    // not mistaken for a dead connection (Acks are ignored
+                    // by the receive loop).
+                    if last_keepalive.elapsed() >= PAUSE_KEEPALIVE {
+                        send_control_timed(
+                            stream,
+                            session,
+                            seq,
+                            &Control::Ack { file_id: offer.file_id.clone(), offset },
+                        )
+                        .await?;
+                        seq += 1;
+                        last_keepalive = Instant::now();
+                    }
                     tokio::time::sleep(Duration::from_millis(200)).await;
                     if state.is_item_cancelled(&item.id).await {
-                        return Err(anyhow!("cancelled while paused"));
+                        send_control_timed(
+                            stream,
+                            session,
+                            seq,
+                            &Control::Cancel {
+                                file_id: Some(offer.file_id.clone()),
+                                reason: Some("cancelled by sender".into()),
+                            },
+                        )
+                        .await?;
+                        return Ok((seq + 1, false));
                     }
                 }
 
-                send_control(
+                send_control_timed(
                     stream,
                     session,
                     seq,
@@ -518,7 +622,11 @@ async fn stream_file(
                 seq += 1;
 
                 let sealed = session.seal(&payload)?;
-                write_frame(stream, seq, &sealed).await?;
+                tokio::time::timeout(IO_TIMEOUT, write_frame(stream, seq, &sealed))
+                    .await
+                    .map_err(|_| {
+                        anyhow!("connection lost (send timed out after {}s)", IO_TIMEOUT.as_secs())
+                    })??;
                 seq += 1;
 
                 let wire_len = payload.len() as u64;
@@ -545,7 +653,7 @@ async fn stream_file(
         }
     }
 
-    send_control(
+    send_control_timed(
         stream,
         session,
         seq,
@@ -555,20 +663,25 @@ async fn stream_file(
     seq += 1;
 
     // Wait for the receiver's final ACK so "done" means "on their disk".
+    // Bounded: flushing + renaming even a huge file never takes minutes.
     loop {
-        match recv_control(stream, session).await? {
+        match recv_control_timed(stream, session, IDLE_TIMEOUT * 2).await? {
             Control::Ack { offset, .. } if offset >= item.size => break,
             Control::Ack { offset, .. } => {
                 state
                     .update_transfer(&item.id, |t| t.resume_offset = offset)
                     .await;
             }
+            Control::Cancel { reason, .. } => {
+                let why = reason.unwrap_or_else(|| "cancelled by receiver".into());
+                return Err(anyhow!(why));
+            }
             Control::Bye => break,
             _ => {}
         }
     }
 
-    Ok(seq)
+    Ok((seq, true))
 }
 
 // ── inbound ─────────────────────────────────────────────────────────────────
@@ -775,7 +888,10 @@ async fn handle_inbound(state: Arc<AppState>, mut stream: TcpStream, addr: Strin
     // (file_id, handle, written, hasher, last_ack, last_emit, window_bytes, window_start)
 
     loop {
-        let control = match recv_control(&mut stream, &session).await {
+        // Bounded read: a healthy session always has traffic within the idle
+        // window (paused senders emit keepalive Acks), so silence means the
+        // link is gone — fail visibly instead of showing "active" forever.
+        let control = match recv_control_timed(&mut stream, &session, IDLE_TIMEOUT).await {
             Ok(control) => control,
             Err(err) => {
                 // A dropped connection is normal — the offsets on disk let the
@@ -787,10 +903,13 @@ async fn handle_inbound(state: Arc<AppState>, mut stream: TcpStream, addr: Strin
                                 t.status = TransferStatus::Paused;
                                 t.speed = 0.0;
                                 t.resume_offset = written;
+                                t.error = Some(err.to_string());
                             })
                             .await;
                     }
                 }
+                // Files the sender never started must not sit at "queued".
+                fail_pending(&state, &items, "sender disconnected").await;
                 return Err(err);
             }
         };
@@ -851,6 +970,35 @@ async fn handle_inbound(state: Arc<AppState>, mut stream: TcpStream, addr: Strin
 
             Control::Chunk { file_id, offset, len: _, compressed } => {
                 let frame = read_frame(&mut stream).await?;
+
+                // Receiver-side cancel: tell the sender and hang up (it has
+                // no read path mid-stream, so closing is what stops it).
+                if let Some(item) = items.get(&file_id) {
+                    if state.is_item_cancelled(&item.id).await {
+                        let _ = send_control_timed(
+                            &mut stream,
+                            &session,
+                            seq,
+                            &Control::Cancel {
+                                file_id: Some(file_id.clone()),
+                                reason: Some(format!("cancelled by {}", settings.device_name)),
+                            },
+                        )
+                        .await;
+                        if let Some((_, handle, _, _, _, _, _, _)) = current.take() {
+                            drop(handle);
+                        }
+                        let _ = tokio::fs::remove_file(part_path(&download_dir, &item.name)).await;
+                        state.log(
+                            LogLevel::Warn,
+                            "RX",
+                            format!("{} cancelled — told {}", item.name, device.name),
+                        );
+                        fail_pending(&state, &items, "cancelled on this device").await;
+                        return Ok(());
+                    }
+                }
+
                 let payload = session.open(&frame.payload)?;
                 let bytes = if compressed {
                     zstd::decode_all(payload.as_slice())?
@@ -989,12 +1137,77 @@ async fn handle_inbound(state: Arc<AppState>, mut stream: TcpStream, addr: Strin
                 crate::tray::refresh_activity(&state).await;
             }
 
+            Control::Cancel { file_id, reason } => {
+                let why = reason.unwrap_or_else(|| "cancelled by sender".into());
+                match file_id {
+                    Some(fid) => {
+                        // Close the handle first if this is the in-flight file.
+                        if current.as_ref().map(|c| c.0 == fid).unwrap_or(false) {
+                            if let Some((_, handle, _, _, _, _, _, _)) = current.take() {
+                                drop(handle);
+                            }
+                        }
+                        if let Some(item) = items.get(&fid) {
+                            let _ =
+                                tokio::fs::remove_file(part_path(&download_dir, &item.name)).await;
+                            state
+                                .update_transfer(&item.id, |t| {
+                                    t.status = TransferStatus::Failed;
+                                    t.speed = 0.0;
+                                    t.error = Some(why.clone());
+                                })
+                                .await;
+                            state.log(
+                                LogLevel::Warn,
+                                "RX",
+                                format!("{} — {}", item.name, why),
+                            );
+                        }
+                    }
+                    None => {
+                        if let Some((_, handle, _, _, _, _, _, _)) = current.take() {
+                            drop(handle);
+                        }
+                        fail_pending(&state, &items, &why).await;
+                        break;
+                    }
+                }
+            }
+
             Control::Bye => break,
             _ => {}
         }
     }
 
+    // Anything the sender never started (and never cancelled explicitly)
+    // must not linger at "queued" after the session is over.
+    fail_pending(&state, &items, "session ended before this file was sent").await;
+
     Ok(())
+}
+
+/// Marks every item of this session that is still pending (queued/handshaking)
+/// as failed with `reason`. Items already done/failed/removed are untouched.
+async fn fail_pending(
+    state: &Arc<AppState>,
+    items: &HashMap<String, TransferItem>,
+    reason: &str,
+) {
+    for item in items.values() {
+        let pending = matches!(
+            state.transfer(&item.id).await.map(|t| t.status),
+            Some(TransferStatus::Queued) | Some(TransferStatus::Handshaking)
+        );
+        if pending {
+            state
+                .update_transfer(&item.id, |t| {
+                    t.status = TransferStatus::Failed;
+                    t.speed = 0.0;
+                    t.error = Some(reason.to_string());
+                })
+                .await;
+        }
+    }
 }
 
 async fn request_consent(

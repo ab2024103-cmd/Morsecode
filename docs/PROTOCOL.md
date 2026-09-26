@@ -84,6 +84,16 @@ Control::Ack{file_id, offset == size}               ← "it is on my disk"
   target that percentage of a 1 Gbps reference ceiling.
 * **Broadcast** — one independent session (and one Tokio task) per target device,
   so the same file set streams to N peers in parallel.
+* **Cancel** (≥ 1.0.6) — `Control::Cancel{file_id?, reason?}` from either side.
+  The sender emits it when its user cancels a file (before or mid-stream) and
+  moves on to the next file; the receiver marks the item failed and deletes the
+  partial. A receiver-side cancel sends `Cancel` and closes the connection
+  (the sender has no read path mid-stream), which fails the sender's session.
+* **Timeouts** (≥ 1.0.6) — every socket write is bounded by 30 s; the receiver
+  fails a session silent for 60 s (a paused sender emits keepalive `Ack`s every
+  5 s so pauses survive); the sender waits up to 150 s for the consent verdict.
+  A timed-out transfer is marked failed with its resume offset intact — nothing
+  sits at "queued"/"active" forever after a network drop.
 
 ## 5. Resume
 

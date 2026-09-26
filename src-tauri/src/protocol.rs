@@ -88,6 +88,13 @@ pub enum Control {
         file_id: String,
         crc32: u32,
     },
+    /// Either side aborts one file (`file_id`) or the whole session (None).
+    /// The other side marks the matching transfer(s) instead of sitting on a
+    /// socket that will never deliver. Requires both peers ≥ 1.0.6.
+    Cancel {
+        file_id: Option<String>,
+        reason: Option<String>,
+    },
     Clipboard {
         text: String,
     },
