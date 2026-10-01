@@ -89,6 +89,14 @@ Control::Ack{file_id, offset == size}               ← "it is on my disk"
   moves on to the next file; the receiver marks the item failed and deletes the
   partial. A receiver-side cancel sends `Cancel` and closes the connection
   (the sender has no read path mid-stream), which fails the sender's session.
+* **Receiver-driven pause/cancel** (≥ 1.0.7) — after `ResumeState` the sender
+  splits its socket: a reader task applies the receiver's live
+  `Pause{file_id}` / `Resume{file_id}` / `Cancel` controls to the same
+  pause/cancel flags the streaming loop already polls, and forwards `Ack`s to
+  the writer. The receiver relays its local pause/resume/cancel of the
+  in-flight file as these controls. Duplicate rows are impossible on retry:
+  a new session for the same (device, name, size) supersedes any stale
+  non-done item on the receiver.
 * **Timeouts** (≥ 1.0.6) — every socket write is bounded by 30 s; the receiver
   fails a session silent for 60 s (a paused sender emits keepalive `Ack`s every
   5 s so pauses survive); the sender waits up to 150 s for the consent verdict.

@@ -95,6 +95,15 @@ pub enum Control {
         file_id: Option<String>,
         reason: Option<String>,
     },
+    /// Receiver asks the sender to hold this file (≥ 1.0.7). The sender's
+    /// pause loop emits keepalive Acks so neither side idles out.
+    Pause {
+        file_id: String,
+    },
+    /// Receiver asks the sender to continue a file it paused (≥ 1.0.7).
+    Resume {
+        file_id: String,
+    },
     Clipboard {
         text: String,
     },
