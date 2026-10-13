@@ -68,6 +68,12 @@ export interface PickedFile {
   size: number;
 }
 
+/** Expand absolute paths (e.g. from a native drag-drop) into PickedFiles. */
+export async function statPaths(paths: string[]): Promise<PickedFile[]> {
+  if (!isTauri || !paths.length) return [];
+  return invoke<PickedFile[]>('stat_paths', { paths });
+}
+
 export async function pickFiles(directory = false): Promise<PickedFile[]> {
   if (!isTauri) return [];
   const { open } = await import('@tauri-apps/plugin-dialog');

@@ -118,36 +118,15 @@ textarea {
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
 }
 
-/* The three-column shell needs real width; below ~1360px the right rail
-   crowds the main column into overlapping, clipped cards (common on
-   1280×720 / 1366×768 laptops) — hide it and let the main content breathe. */
-@media (max-width: 1359px) {
+/* Hide the right rail when the window is too narrow for three columns.
+   1320px keeps 1366×768 laptops exactly as designed while giving 1280px
+   screens the two-column layout instead of clipped, overlapping cards. */
+@media (max-width: 1320px) {
   .app-body {
     grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   }
   .rightrail {
     display: none;
-  }
-}
-
-/* Short screens: tighten the chrome and let the sidebar scroll as one unit
-   instead of crushing the nav into its own tiny scroll strip. */
-@media (max-height: 800px) {
-  .app-body {
-    gap: 10px;
-    padding: 0 10px 10px;
-  }
-  .sidebar {
-    overflow-y: auto;
-    gap: 8px;
-    padding: 10px;
-  }
-  .sb-nav {
-    overflow-y: visible;
-    flex: none;
-  }
-  .main {
-    gap: 10px;
   }
 }
 

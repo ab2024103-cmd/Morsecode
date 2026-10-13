@@ -26,9 +26,12 @@ export function TransferQueue({ items, direction, title }: TransferQueueProps) {
           <span className="chip">
             {completed}/{items.length} · {formatBytes(total)}
           </span>
-          <Button size="sm" variant="ghost" icon="pause" onClick={() => void pauseAll()} disabled={!items.length}>
-            Pause
-          </Button>
+          {/* Pausing is a receiver-side control; sender rows only cancel/retry. */}
+          {direction === 'receive' && (
+            <Button size="sm" variant="ghost" icon="pause" onClick={() => void pauseAll()} disabled={!items.length}>
+              Pause
+            </Button>
+          )}
           <Button size="sm" variant="ghost" icon="trash" onClick={() => void clearCompleted()} disabled={!completed}>
             Clear done
           </Button>

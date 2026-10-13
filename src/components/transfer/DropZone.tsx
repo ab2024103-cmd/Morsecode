@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../shared/Icon';
 import { Button } from '../shared/Button';
-import { pickFiles, isTauri, type PickedFile } from '../../ipc/commands';
+import { pickFiles, statPaths, isTauri, type PickedFile } from '../../ipc/commands';
 
 interface DropZoneProps {
   onFiles: (files: PickedFile[]) => void;
@@ -12,6 +12,51 @@ interface DropZoneProps {
 export function DropZone({ onFiles, disabled, hint }: DropZoneProps) {
   const [over, setOver] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+
+  // Keep the latest callbacks without re-subscribing the Tauri listeners.
+  const onFilesRef = useRef(onFiles);
+  onFilesRef.current = onFiles;
+  const disabledRef = useRef(disabled);
+  disabledRef.current = disabled;
+
+  // In the real app the webview's HTML5 drop events never fire: Tauri
+  // intercepts native drag-drop and emits its own events (which also carry
+  // the absolute paths the backend needs — a browser File has none).
+  useEffect(() => {
+    if (!isTauri) return;
+    let disposed = false;
+    const unlisteners: Array<() => void> = [];
+    void (async () => {
+      const { listen } = await import('@tauri-apps/api/event');
+      const subs = await Promise.all([
+        listen('tauri://drag-enter', () => {
+          if (!disabledRef.current) setOver(true);
+        }),
+        listen('tauri://drag-over', () => {
+          if (!disabledRef.current) setOver(true);
+        }),
+        listen('tauri://drag-leave', () => setOver(false)),
+        listen<{ paths?: string[] }>('tauri://drag-drop', (event) => {
+          setOver(false);
+          if (disabledRef.current) return;
+          const paths = event.payload?.paths ?? [];
+          if (!paths.length) return;
+          void statPaths(paths).then((files) => {
+            if (files.length) onFilesRef.current(files);
+          });
+        }),
+      ]);
+      if (disposed) {
+        subs.forEach((un) => un());
+      } else {
+        unlisteners.push(...subs);
+      }
+    })();
+    return () => {
+      disposed = true;
+      unlisteners.forEach((un) => un());
+    };
+  }, []);
 
   const fromFileList = (list: FileList | null) => {
     if (!list) return;

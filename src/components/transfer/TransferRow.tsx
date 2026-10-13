@@ -30,6 +30,7 @@ export function TransferRow({ item }: { item: TransferItem }) {
   const resume = useTransferStore((s) => s.resume);
   const cancel = useTransferStore((s) => s.cancel);
   const progress = pct(item.transferred, item.size);
+  const isSend = item.direction === 'send';
 
   return (
     <div className="txrow">
@@ -69,16 +70,19 @@ export function TransferRow({ item }: { item: TransferItem }) {
       </div>
 
       <div className="txrow-actions">
-        {(item.status === 'queued' || item.status === 'handshaking' || item.status === 'active') && (
-          <IconButton icon="pause" label="Pause" onClick={() => void pause(item.id)} />
-        )}
-        {item.status === 'paused' && (
+        {/* Sender rows: cancel only, plus retry after a failure. Pause and
+            resume live on the receiving side. */}
+        {!isSend &&
+          (item.status === 'queued' || item.status === 'handshaking' || item.status === 'active') && (
+            <IconButton icon="pause" label="Pause" onClick={() => void pause(item.id)} />
+          )}
+        {!isSend && item.status === 'paused' && (
           <IconButton icon="play" label="Resume" onClick={() => void resume(item.id)} />
         )}
-        {item.status === 'failed' && item.direction === 'send' && (
+        {isSend && item.status === 'failed' && (
           <IconButton icon="refresh" label="Retry" onClick={() => void resume(item.id)} />
         )}
-        <IconButton icon="x" label="Remove" onClick={() => void cancel(item.id)} />
+        <IconButton icon="x" label="Cancel" onClick={() => void cancel(item.id)} />
       </div>
     </div>
   );
