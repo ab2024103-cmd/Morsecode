@@ -16,6 +16,7 @@ import {
   stopDiscovery,
 } from '../../ipc/commands';
 import { useHostInfo } from '../../hooks/useHostInfo';
+import { playNotification, type SoundMode } from '../../lib/sounds';
 
 export function SettingsPanel({ onManageTrusted }: { onManageTrusted: () => void }) {
   const { settings, update, reset } = useSettingsStore();
@@ -23,6 +24,13 @@ export function SettingsPanel({ onManageTrusted }: { onManageTrusted: () => void
   const devices = useDeviceList();
   const revoke = useDeviceStore((s) => s.revoke);
   const toast = useToastStore((s) => s.push);
+
+  // Switch the sound mode and immediately preview it so the user hears
+  // what (and how loud) they just picked.
+  const setSounds = (sounds: SoundMode) => {
+    update('notificationSounds', sounds);
+    playNotification(sounds === 'multi' ? 'success' : 'info', sounds);
+  };
   const host = useHostInfo();
   const trusted = devices.filter((d) => d.trusted);
   const [logPath, setLogPath] = useState('');
@@ -137,6 +145,32 @@ export function SettingsPanel({ onManageTrusted }: { onManageTrusted: () => void
                 </button>
                 <button aria-pressed={mode === 'light'} onClick={() => setMode('light')}>
                   Light
+                </button>
+              </div>
+            </div>
+            <div className="field">
+              <span className="field-label">Alert sounds</span>
+              <div className="pill-switch">
+                <button
+                  aria-pressed={settings.notificationSounds === 'multi'}
+                  onClick={() => setSounds('multi')}
+                  title="A distinct chime per event: success, failure, incoming request"
+                >
+                  Multi
+                </button>
+                <button
+                  aria-pressed={settings.notificationSounds === 'single'}
+                  onClick={() => setSounds('single')}
+                  title="The same ping for every notification"
+                >
+                  Single
+                </button>
+                <button
+                  aria-pressed={settings.notificationSounds === 'off'}
+                  onClick={() => setSounds('off')}
+                  title="No notification sounds"
+                >
+                  Off
                 </button>
               </div>
             </div>

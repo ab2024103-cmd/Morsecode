@@ -56,6 +56,7 @@ const DEFAULT_SETTINGS: Settings = {
   largeTransferThresholdMb: 500,
   minimizeToTray: true,
   nativeNotifications: true,
+  notificationSounds: 'multi',
   showSystemLogClassic: true,
 };
 

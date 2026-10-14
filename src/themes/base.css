@@ -118,17 +118,12 @@ textarea {
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
 }
 
-/* Hide the right rail when the window is too narrow for three columns.
-   1320px keeps 1366×768 laptops exactly as designed while giving 1280px
-   screens the two-column layout instead of clipped, overlapping cards. */
-@media (max-width: 1320px) {
-  .app-body {
-    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
-  }
-  .rightrail {
-    display: none;
-  }
-}
+/* The narrow-screen rules live at the BOTTOM of this file. They must come
+   after every component rule: media queries do not add specificity, so a
+   `.rightrail { display: none }` placed here would silently lose to the
+   `.rightrail { display: flex }` component rule declared later in the file.
+   That exact cascade bug is what used to wrap the Session rail underneath
+   the sidebar on 1280px-wide screens. */
 
 /* ── titlebar ────────────────────────────────────────────────────────────── */
 .titlebar {
@@ -1860,5 +1855,56 @@ table.data td.mono {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+  }
+}
+
+/* ── responsive layout — KEEP AT THE END OF THIS FILE ─────────────────────
+   Media queries do not raise specificity; order in the file decides the
+   winner. These rules must out-cascade the component rules above (e.g. the
+   unconditional `.rightrail { display: flex }`), so they stay last.
+
+   Below 1360px there is no room for the 322px session rail next to the
+   sidebar and the content column, so the shell collapses to two columns
+   and the rail is removed from the layout entirely (its live stats stay
+   visible in the titlebar chips). 1366×768 laptops keep all three columns. */
+@media (max-width: 1360px) {
+  .app-body {
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  }
+
+  .rightrail {
+    display: none !important;
+  }
+}
+
+/* Explicit grid placement: even if a stylesheet ever disagrees with the
+   column template again, the rail may never wrap underneath the sidebar. */
+.app-body > .sidebar {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.app-body > .main {
+  grid-row: 1;
+  grid-column: 2;
+}
+
+.app-body > .rightrail {
+  grid-row: 1;
+  grid-column: 3;
+}
+
+/* Short screens: let the whole sidebar scroll as one unit instead of
+   crushing the nav list into a tiny inner scroll strip. Width is not a
+   proxy for height here, so this is the one height query we keep — it
+   only relaxes overflow behaviour and never moves or hides anything. */
+@media (max-height: 560px) {
+  .sidebar {
+    overflow-y: auto;
+  }
+
+  .sb-nav {
+    flex: none;
+    overflow-y: visible;
   }
 }

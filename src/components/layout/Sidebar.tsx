@@ -5,6 +5,7 @@ import { useDeviceStore } from '../../store/useDeviceStore';
 import { useTransfers } from '../../store/useTransferStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useHostInfo } from '../../hooks/useHostInfo';
+import { APP_VERSION } from '../../lib/version';
 
 interface NavItem {
   id: ScreenId;
@@ -92,7 +93,7 @@ export function Sidebar({ screen, onNavigate }: SidebarProps) {
           <span>
             {deviceName}
             <small>
-              {host.ip} · {host.runtime === 'tauri' ? host.platform : 'preview'}
+              {host.ip} · {host.runtime === 'tauri' ? host.platform : 'preview'} · v{APP_VERSION}
             </small>
           </span>
         </div>

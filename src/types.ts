@@ -113,6 +113,8 @@ export interface Settings {
   /** System */
   minimizeToTray: boolean;
   nativeNotifications: boolean;
+  /** 'multi' = distinct chime per event, 'single' = same ping for all, 'off' = silent. */
+  notificationSounds: 'multi' | 'single' | 'off';
   showSystemLogClassic: boolean;
 }
 

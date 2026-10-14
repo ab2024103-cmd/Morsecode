@@ -198,7 +198,15 @@ pub struct Settings {
     pub large_transfer_threshold_mb: u64,
     pub minimize_to_tray: bool,
     pub native_notifications: bool,
+    /// "multi" = distinct chime per event, "single" = same ping for all, "off" = silent.
+    /// Defaulted for settings files written by older versions.
+    #[serde(default = "default_notification_sounds")]
+    pub notification_sounds: String,
     pub show_system_log_classic: bool,
+}
+
+fn default_notification_sounds() -> String {
+    "multi".to_string()
 }
 
 impl Default for Settings {
@@ -222,6 +230,7 @@ impl Default for Settings {
             large_transfer_threshold_mb: 500,
             minimize_to_tray: true,
             native_notifications: true,
+            notification_sounds: default_notification_sounds(),
             show_system_log_classic: true,
         }
     }

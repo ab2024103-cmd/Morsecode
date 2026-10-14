@@ -3,6 +3,7 @@ import type { Toast, ToastKind } from '../types';
 import { uid } from '../lib/format';
 import { nativeNotify } from '../ipc/commands';
 import { useSettingsStore } from './useSettingsStore';
+import { playNotification } from '../lib/sounds';
 
 interface ToastState {
   toasts: Toast[];
@@ -20,6 +21,8 @@ export const useToastStore = create<ToastState>()((set) => ({
     if (useSettingsStore.getState().settings.nativeNotifications) {
       void nativeNotify(title, body ?? '');
     }
+    // Audible chime — distinct per event kind, configurable in Settings.
+    playNotification(kind, useSettingsStore.getState().settings.notificationSounds);
     if (ttl > 0) {
       window.setTimeout(() => {
         set((s) => ({ toasts: s.toasts.filter((t) => t.id !== toast.id) }));
